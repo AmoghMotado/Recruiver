@@ -1,6 +1,6 @@
-// pages/candidate/job-profiles.js – LIGHT THEME / MATCH RECRUITER
+// pages/candidate/job-profiles.js
 import { useEffect, useMemo, useState } from "react";
-import Layout from "@/components/Layout";
+import Layout from "../../components/Layout";
 
 function CandidateJobProfiles() {
   const [tab, setTab] = useState("JOBS"); // "JOBS" | "APPS"
@@ -12,31 +12,68 @@ function CandidateJobProfiles() {
   const [exp, setExp] = useState("");
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const jobsRes = await fetch("/api/jobs?limit=100");
-        const appsRes = await fetch("/api/jobs/applied");
+        const [jobsRes, appsRes] = await Promise.all([
+          fetch("/api/jobs?limit=100", {
+            credentials: "include", // ensure cookies are sent
+          }),
+          fetch("/api/jobs/applied", {
+            credentials: "include",
+          }),
+        ]);
 
+        // If either endpoint says "not authenticated", redirect to login.
+        if (jobsRes.status === 401 || appsRes.status === 401) {
+          if (!cancelled) {
+            alert("Not authenticated. Please log in again.");
+            if (typeof window !== "undefined") {
+              window.location.href = "/login?role=candidate";
+            }
+          }
+          return;
+        }
+
+        // Jobs
         const jobsData = await jobsRes.json().catch(() => ({}));
-        if (!jobsRes.ok)
+        if (!jobsRes.ok) {
           throw new Error(jobsData?.message || "Failed to load jobs");
-        setJobs(jobsData.jobs || []);
+        }
+        if (!cancelled) {
+          setJobs(jobsData.jobs || []);
+        }
 
+        // Applications
         if (appsRes.status === 404) {
-          setApps([]);
+          if (!cancelled) setApps([]);
         } else {
           const appsData = await appsRes.json().catch(() => ({}));
-          if (!appsRes.ok)
-            throw new Error(appsData?.message || "Failed to load applications");
-          setApps(appsData.applications || []);
+          if (!appsRes.ok) {
+            throw new Error(
+              appsData?.message || "Failed to load applications"
+            );
+          }
+          if (!cancelled) {
+            setApps(appsData.applications || []);
+          }
         }
       } catch (e) {
-        alert(e.message);
+        if (!cancelled) {
+          alert(e.message || "Something went wrong while loading jobs.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
+    };
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const appliedJobIds = useMemo(
@@ -52,26 +89,42 @@ function CandidateJobProfiles() {
         j.title?.toLowerCase().includes(q) ||
         j.company?.toLowerCase().includes(q) ||
         (j.stack || "").toLowerCase().includes(q);
+
       const passLoc =
         !loc || (j.location || "").toLowerCase().includes(loc.toLowerCase());
+
       const passExp =
         !exp ||
         (j.experience || "").toLowerCase().includes(exp.toLowerCase());
+
       return passQ && passLoc && passExp;
     });
   }, [jobs, query, loc, exp]);
 
   const apply = async (jobId) => {
     try {
-      const res = await fetch(`/api/jobs/${jobId}/apply`, { method: "POST" });
+      const res = await fetch(`/api/jobs/${jobId}/apply`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        alert("Not authenticated. Please log in again.");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login?role=candidate";
+        }
+        return;
+      }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || "Failed to apply");
+
       if (data?.application) {
         setApps((prev) => [{ ...data.application }, ...prev]);
       }
       alert("Applied successfully!");
     } catch (e) {
-      alert(e.message);
+      alert(e.message || "Something went wrong while applying.");
     }
   };
 
@@ -275,9 +328,11 @@ function ApplicationRow({ app }) {
         <div className="text-sm font-semibold text-slate-900">
           {stageText(app.stage)}
         </div>
-        <div className="text-[11px] text-slate-400">
-          Application ID: {app.id.slice(0, 8)}…
-        </div>
+        {app.id && (
+          <div className="text-[11px] text-slate-400">
+            Application ID: {String(app.id).slice(0, 8)}…
+          </div>
+        )}
       </div>
     </div>
   );

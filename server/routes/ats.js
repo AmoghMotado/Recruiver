@@ -6,15 +6,123 @@ const fs = require("fs");
 
 const { db } = require("../lib/firebaseAdmin");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { computeGeneralATS, computeMatchATS } = require("../ats/scoring");
 
 const router = express.Router();
 
-// temp upload dir
+/* ------------------------------ MULTER SETUP ------------------------------ */
+
+// Memory storage for pure ATS analysis (no temp files)
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
+});
+
+// Disk storage for existing /upload-score endpoint (kept as-is for Round 1)
 const uploadDir = path.join(process.cwd(), "uploads", "ats");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir });
+const diskUpload = multer({ dest: uploadDir });
 
-// DEMO parser: reads bytes as text (works for .txt; for PDFs use `pdf-parse`)
+/* ----------------------------- FILE → TEXT helper ------------------------- */
+/**
+ * Safely convert an uploaded file to plain UTF-8 text.
+ * We intentionally avoid pdf-parse here to keep things stable across
+ * environments. For normal text-based PDFs and DOCX→text conversions,
+ * Buffer.toString("utf8") works well enough for ATS scoring.
+ */
+async function fileToText(file) {
+  if (!file) return "";
+  return file.buffer.toString("utf8");
+}
+
+/* ---------------------------- BASIC ATS ENDPOINTS ------------------------- */
+
+/**
+ * POST /api/ats/general
+ * multipart/form-data with field "resume"
+ */
+router.post("/general", memoryUpload.single("resume"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Resume file is required" });
+    }
+
+    const text = await fileToText(req.file);
+    if (!text.trim()) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Could not read text from resume" });
+    }
+
+    const result = computeGeneralATS(text);
+
+    return res.json({
+      ok: true,
+      ...result, // { score, breakdown, suggestions, meta }
+    });
+  } catch (err) {
+    console.error("ATS general error:", err);
+    return res
+      .status(500)
+      .json({ ok: false, message: "ATS analysis failed" });
+  }
+});
+
+/**
+ * POST /api/ats/match
+ * multipart/form-data with fields "resume" and "jd"
+ */
+router.post(
+  "/match",
+  memoryUpload.fields([
+    { name: "resume", maxCount: 1 },
+    { name: "jd", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const resumeFile = req.files?.resume?.[0];
+      const jdFile = req.files?.jd?.[0];
+
+      if (!resumeFile || !jdFile) {
+        return res.status(400).json({
+          ok: false,
+          message: "Resume and JD files are both required",
+        });
+      }
+
+      const resumeText = await fileToText(resumeFile);
+      const jdText = await fileToText(jdFile);
+
+      if (!resumeText.trim() || !jdText.trim()) {
+        return res.status(400).json({
+          ok: false,
+          message: "Could not read text from resume or JD",
+        });
+      }
+
+      const result = computeMatchATS(resumeText, jdText);
+
+      return res.json({
+        ok: true,
+        ...result, // { score, general, match }
+      });
+    } catch (err) {
+      console.error("ATS match error:", err);
+      return res
+        .status(500)
+        .json({ ok: false, message: "ATS match failed" });
+    }
+  }
+);
+
+/* ----------------------- EXISTING FIRESTORE MATCH ROUTE ------------------- */
+/**
+ * This is your original Round-1 upload-score endpoint. Kept as-is.
+ */
+
+// DEMO parser: reads bytes as text and extracts simple skills
 function extractSkillsFromText(txt) {
   if (!txt) return [];
   const words = txt
@@ -107,19 +215,11 @@ function scoreMatch(resumeSkills = [], jobSkillsSource = "") {
   return { score, matched, missing, jobSkills: Array.from(jobSet) };
 }
 
-/**
- * POST /api/ats/upload-score
- * form-data: resume (file), jobId (string)
- * returns: { filename, score, matched, missing, job, jobSkills, extractedSkills }
- *
- * Also upserts an `applications` document in Firestore:
- * - jobId, studentId, resumeScore, atsMatchedSkills, atsMissingSkills, extractedSkills
- */
 router.post(
   "/upload-score",
   requireAuth,
   requireRole("CANDIDATE"),
-  upload.single("resume"),
+  diskUpload.single("resume"),
   async (req, res) => {
     try {
       if (!req.file) {
@@ -138,10 +238,10 @@ router.post(
       }
       const job = { id: jobDoc.id, ...jobDoc.data() };
 
-      // 2. Read file and extract skills (stub: plain text)
+      // 2. Read file and extract skills
       const fullPath = req.file.path;
       const buffer = fs.readFileSync(fullPath);
-      const text = buffer.toString("utf8"); // replace with pdf-parse for PDFs
+      const text = buffer.toString("utf8");
       const extractedSkills = extractSkillsFromText(text);
 
       // cleanup temp file
@@ -149,7 +249,7 @@ router.post(
         fs.unlinkSync(fullPath);
       } catch (_) {}
 
-      // 3. Score match against job.requiredSkills / job.stack / job.skills
+      // 3. Score match against job skills
       const jobSkillsSource =
         job.requiredSkills || job.stack || job.skills || "";
       const { score, matched, missing, jobSkills } = scoreMatch(

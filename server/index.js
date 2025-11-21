@@ -17,35 +17,50 @@ app
   .then(() => {
     const server = express();
 
-    // Middlewares
+    // CORS
     server.use(
       cors({
         origin: true,
         credentials: true,
       })
     );
-    server.use(express.json());
+
+    // JSON parser (skip for ATS multipart routes to avoid PayloadTooLargeError)
+    const jsonParser = express.json({ limit: "2mb" });
+    server.use((req, res, next) => {
+      if (req.path.startsWith("/api/ats/")) {
+        return next();
+      }
+      return jsonParser(req, res, next);
+    });
+
     server.use(cookieParser());
     server.use(morgan("dev"));
 
-    // Serve uploaded files statically
-    server.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+    // Static uploads
+    server.use(
+      "/uploads",
+      express.static(path.join(process.cwd(), "uploads"))
+    );
 
-    // API routes (Express)
+    // API routes
     server.use("/api/auth", require("./routes/auth"));
     server.use("/api/jobs", require("./routes/jobs"));
     server.use("/api/profile", require("./routes/profile"));
-    server.use("/api/ats", require("./routes/ats"));
-    server.use("/api/mock", require("./routes/mock")); // Aptitude tests
-    server.use("/api/mock-interview", require("./routes/mockInterview")); // ✅ AI Mock Interview
-    server.use("/api/chat", require("./routes/chat")); // ✅ Chat assistant
 
-    // Let Next handle everything else
+    // ✅ NEW unified ATS microservice
+    server.use("/api/ats", require("./ats"));
+
+    server.use("/api/mock", require("./routes/mock"));
+    server.use("/api/mock-interview", require("./routes/mockInterview"));
+    server.use("/api/chat", require("./routes/chat"));
+
+    // Let Next.js handle all page routes
     server.all("*", (req, res) => handle(req, res));
 
-    server.listen(PORT, () =>
-      console.log(`➡ Server ready on http://localhost:${PORT}`)
-    );
+    server.listen(PORT, () => {
+      console.log(`➡ Server ready on http://localhost:${PORT}`);
+    });
   })
   .catch((err) => {
     console.error("Error starting server:", err);

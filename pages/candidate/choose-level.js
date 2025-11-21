@@ -1,3 +1,4 @@
+// pages/candidate/choose-level.js
 import { useRouter } from "next/router";
 import { useEffect } from "react";
 import Layout from "../../components/Layout";
@@ -6,13 +7,17 @@ export default function ChooseLevel() {
   const router = useRouter();
 
   useEffect(() => {
-    const nextRoute = localStorage.getItem("recruiver.next.route");
+    // If someone lands here directly without coming from ATS flow,
+    // just send them back to resume-ats.
+    const nextRoute =
+      localStorage.getItem("recruiver.next.route") || "/candidate/resume-ats";
     if (!nextRoute) router.replace("/candidate/resume-ats");
   }, [router]);
 
   const chooseCareerLevel = (level) => {
     localStorage.setItem("recruiver.career.level", level);
-    const nextRoute = localStorage.getItem("recruiver.next.route") || "/candidate/resume-ats";
+    const nextRoute =
+      localStorage.getItem("recruiver.next.route") || "/candidate/resume-ats";
     router.push(nextRoute);
   };
 
@@ -27,19 +32,25 @@ export default function ChooseLevel() {
       <div className="card">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold">Choose Career Level</h3>
-          <button className="btn ghost" onClick={() => router.push("/candidate/resume-ats")}>
+          <button
+            className="btn ghost"
+            onClick={() => router.push("/candidate/resume-ats")}
+          >
             Close
           </button>
         </div>
         <p className="text-sm opacity-80 mb-4">
-          Select the level that best matches your experience.
+          We’ll adjust ATS expectations slightly based on your current level.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {opts.map((o) => (
             <div key={o.level} className="card border border-white/10">
               <div className="font-semibold">{o.title}</div>
               <div className="text-sm opacity-75 mt-1">{o.desc}</div>
-              <button className="btn primary mt-4" onClick={() => chooseCareerLevel(o.level)}>
+              <button
+                className="btn primary mt-4"
+                onClick={() => chooseCareerLevel(o.level)}
+              >
                 CHOOSE
               </button>
             </div>
