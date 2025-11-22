@@ -1,5 +1,12 @@
-// components/recruiter/CandidatesTable.js - UPDATED WITH REAL DATA
+// components/recruiter/CandidatesTable.js
 import { useMemo } from "react";
+
+const STATUS_LABEL = {
+  APPLIED: "Applied",
+  UNDER_REVIEW: "Under Review",
+  SHORTLISTED: "Shortlisted",
+  REJECTED: "Rejected",
+};
 
 export default function CandidatesTable({
   rows = [],
@@ -8,7 +15,6 @@ export default function CandidatesTable({
   onToggleAll = () => {},
   onViewResume = () => {},
   onChangeStatus = () => {},
-  onDelete = () => {},
   onBulk = () => {},
   filters = { q: "", status: "All", minScore: 0 },
   setFilters = () => {},
@@ -16,96 +22,67 @@ export default function CandidatesTable({
 }) {
   const visible = useMemo(() => {
     const q = (filters?.q ?? "").toLowerCase();
-    const status = filters?.status ?? "All";
+    const statusFilter = filters?.status ?? "All";
     const min = Number(filters?.minScore ?? 0);
 
     return rows.filter((r) => {
       const matchesQ =
         !q ||
         (r.name || "").toLowerCase().includes(q) ||
-        (r.role || "").toLowerCase().includes(q) ||
+        (r.jobTitle || "").toLowerCase().includes(q) ||
         (r.email || "").toLowerCase().includes(q);
-      const matchesStatus = status === "All" || r.status === status;
+
+      const matchesStatus =
+        statusFilter === "All" || r.status === statusFilter;
+
       const matchesScore = (Number(r.score) || 0) >= min;
+
       return matchesQ && matchesStatus && matchesScore;
     });
   }, [rows, filters]);
 
   const allVisibleSelected =
     visible.length > 0 && visible.every((r) => selectedIds.has(r.id));
-
   const anySelected = selectedIds.size > 0;
-  const statuses = ["Applied", "Under Review", "Shortlisted", "Rejected"];
 
   if (loading) {
     return (
       <div className="card">
-        <div className="py-12 text-center opacity-70">Loading candidates...</div>
+        <div className="py-12 text-center text-gray-500">
+          Loading candidates...
+        </div>
       </div>
     );
   }
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-3">
+      {/* Bulk actions row inside table card */}
+      <div className="flex justify-between items-center mb-3">
         <h3 className="font-semibold text-lg">Candidates</h3>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-          <div>
-            <label className="text-xs opacity-70">Search</label>
-            <input
-              className="input w-full mt-1"
-              placeholder="Search name, email, or role..."
-              value={filters?.q ?? ""}
-              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-xs opacity-70">Status</label>
-            <select
-              className="input w-full mt-1"
-              value={filters?.status ?? "All"}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            >
-              {["All", ...statuses].map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs opacity-70">Min Score</label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className="input w-full mt-1"
-              value={filters?.minScore ?? 0}
-              onChange={(e) => setFilters({ ...filters, minScore: e.target.value })}
-            />
-          </div>
-        </div>
-
-        {/* Bulk actions */}
         <div className="flex flex-wrap gap-2">
           <button
-            className={`btn outline text-xs ${!anySelected ? "opacity-60 cursor-not-allowed" : ""}`}
+            className={`btn outline text-xs ${
+              !anySelected ? "opacity-60 cursor-not-allowed" : ""
+            }`}
             disabled={!anySelected}
             onClick={() => onBulk("review")}
           >
             Move to Review
           </button>
           <button
-            className={`btn outline text-xs ${!anySelected ? "opacity-60 cursor-not-allowed" : ""}`}
+            className={`btn outline text-xs ${
+              !anySelected ? "opacity-60 cursor-not-allowed" : ""
+            }`}
             disabled={!anySelected}
             onClick={() => onBulk("shortlist")}
           >
             Shortlist
           </button>
           <button
-            className={`btn ghost text-xs ${!anySelected ? "opacity-60 cursor-not-allowed" : ""}`}
+            className={`btn ghost text-xs ${
+              !anySelected ? "opacity-60 cursor-not-allowed" : ""
+            }`}
             disabled={!anySelected}
             onClick={() => onBulk("reject")}
           >
@@ -114,17 +91,19 @@ export default function CandidatesTable({
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-left opacity-70">
+          <thead className="text-left text-gray-500 text-xs uppercase">
             <tr>
               <th className="py-2 pr-3">
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={(e) =>
-                    onToggleAll(visible.map((v) => v.id), e.target.checked)
+                    onToggleAll(
+                      visible.map((v) => v.id),
+                      e.target.checked
+                    )
                   }
                 />
               </th>
@@ -133,74 +112,104 @@ export default function CandidatesTable({
               <th className="py-2 pr-4">Score</th>
               <th className="py-2 pr-4">Status</th>
               <th className="py-2 pr-4">Applied On</th>
+              <th className="py-2 pr-4">Resume</th>
               <th className="py-2 pr-4">Actions</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center opacity-70">
+                <td
+                  colSpan={8}
+                  className="py-6 text-center text-gray-400 text-sm"
+                >
                   No candidates match the filters.
                 </td>
               </tr>
             )}
-            {visible.map((c) => (
-              <tr key={c.id} className="border-t border-white/5">
-                <td className="py-3 pr-3 align-top">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(c.id)}
-                    onChange={() => onToggle(c.id)}
-                  />
-                </td>
-                <td className="py-3 pr-4">
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-xs opacity-70">{c.email}</div>
-                </td>
-                <td className="py-3 pr-4">
-                  <div className="font-medium">{c.jobTitle}</div>
-                  <div className="text-xs opacity-70">{c.company}</div>
-                </td>
-                <td className="py-3 pr-4">
-                  <span className="font-semibold">{c.score}</span>
-                </td>
-                <td className="py-3 pr-4">
-                  <span
-                    className={`px-2 py-1 rounded-md text-xs font-medium ${
-                      c.status === "Shortlisted"
-                        ? "bg-emerald-600/30 text-emerald-300"
-                        : c.status === "Under Review"
-                        ? "bg-blue-600/30 text-blue-300"
-                        : c.status === "Rejected"
-                        ? "bg-red-600/30 text-red-300"
-                        : "bg-gray-600/30 text-gray-300"
-                    }`}
-                  >
-                    {c.status}
-                  </span>
-                </td>
-                <td className="py-3 pr-4 text-xs opacity-70">
-                  {c.appliedDate ? new Date(c.appliedDate).toLocaleDateString() : "—"}
-                </td>
-                <td className="py-3 pr-4">
-                  <div className="flex flex-wrap gap-2">
-                    <button 
-                      className="btn outline text-xs" 
-                      onClick={() => onViewResume(c)}
+            {visible.map((c) => {
+              const label = STATUS_LABEL[c.status] || "Applied";
+              return (
+                <tr key={c.id} className="border-t border-gray-100">
+                  <td className="py-3 pr-3 align-top">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => onToggle(c.id)}
+                    />
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <div className="font-medium text-gray-900">{c.name}</div>
+                    <div className="text-xs text-gray-500">{c.email}</div>
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <div className="font-medium text-gray-900">
+                      {c.jobTitle}
+                    </div>
+                    <div className="text-xs text-gray-500">{c.company}</div>
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <span className="font-semibold">
+                      {c.score != null ? c.score : 0}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <span
+                      className={`px-2 py-1 rounded-md text-xs font-medium ${
+                        c.status === "SHORTLISTED"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : c.status === "UNDER_REVIEW"
+                          ? "bg-blue-100 text-blue-700"
+                          : c.status === "REJECTED"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
                     >
-                      View
-                    </button>
-                    <button
-                      className="btn primary text-xs"
-                      onClick={() => onChangeStatus(c.id, "Shortlisted")}
-                      disabled={c.status === "Shortlisted"}
-                    >
-                      Shortlist
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {label}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 align-top text-xs text-gray-500">
+                    {c.appliedDate
+                      ? new Date(
+                          c.appliedDate._seconds
+                            ? c.appliedDate._seconds * 1000
+                            : c.appliedDate
+                        ).toLocaleDateString()
+                      : "—"}
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    {c.resumePath ? (
+                      <button
+                        className="text-xs text-indigo-600 underline font-medium"
+                        onClick={() => onViewResume(c)}
+                      >
+                        View Resume
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="btn outline text-xs"
+                        onClick={() => onChangeStatus(c.id, "SHORTLISTED")}
+                        disabled={c.status === "SHORTLISTED"}
+                      >
+                        Shortlist
+                      </button>
+                      <button
+                        className="btn ghost text-xs"
+                        onClick={() => onChangeStatus(c.id, "REJECTED")}
+                        disabled={c.status === "REJECTED"}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+            );
+            })}
           </tbody>
         </table>
       </div>

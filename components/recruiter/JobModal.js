@@ -1,6 +1,45 @@
 // components/recruiter/JobModal.js
 import { useEffect, useState } from "react";
 
+function toJsDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+
+  if (typeof value === "object") {
+    if (typeof value.toDate === "function") {
+      const d = value.toDate();
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const sec = value._seconds ?? value.seconds;
+    if (typeof sec === "number") {
+      const d = new Date(sec * 1000);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Convert a Date / Timestamp / ISO to the
+ * yyyy-MM-ddTHH:mm format expected by <input type="datetime-local">
+ */
+function toLocalDateTimeInput(value) {
+  const d = toJsDate(value);
+  if (!d) return "";
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const mins = pad(d.getMinutes());
+
+  return `${year}-${month}-${day}T${hours}:${mins}`;
+}
+
 export default function JobModal({ open, initial, onClose, onSave }) {
   const [form, setForm] = useState({
     title: "",
@@ -8,7 +47,7 @@ export default function JobModal({ open, initial, onClose, onSave }) {
     location: "",
     salaryRange: "",
     experience: "",
-    deadline: "",
+    deadline: "", // datetime-local string
     description: "",
     status: "Open",
   });
@@ -23,9 +62,8 @@ export default function JobModal({ open, initial, onClose, onSave }) {
         location: initial.location || "",
         salaryRange: initial.salaryRange || "",
         experience: initial.experience || "",
-        // initial.deadline from table is already pretty string, but for editing
-        // we prefer raw YYYY-MM-DD if available on the job object
-        deadline: initial.rawDeadline || "",
+        // use rawDeadline if we set it on the table row, fall back to deadline
+        deadline: toLocalDateTimeInput(initial.rawDeadline || initial.deadline),
         description: initial.description || "",
         status: initial.status || "Open",
         id: initial.id,
@@ -67,7 +105,7 @@ export default function JobModal({ open, initial, onClose, onSave }) {
     if (!form.company.trim()) return alert("Company name is required");
     if (!form.experience.trim()) return alert("Experience is required");
     if (!form.salaryRange.trim()) return alert("Salary range is required");
-    if (!form.deadline) return alert("Application deadline is required");
+    if (!form.deadline) return alert("Application deadline (date & time) is required");
 
     setUploading(true);
     try {
@@ -79,8 +117,17 @@ export default function JobModal({ open, initial, onClose, onSave }) {
 
         const uploadRes = await fetch("/api/jobs/upload-jd", {
           method: "POST",
+          credentials: "include",
           body: formData,
         });
+
+        if (uploadRes.status === 401) {
+          alert("Not authenticated. Please log in again.");
+          if (typeof window !== "undefined") {
+            window.location.href = "/login?role=recruiter";
+          }
+          return;
+        }
 
         if (!uploadRes.ok) {
           throw new Error("Failed to upload job description file");
@@ -193,16 +240,20 @@ export default function JobModal({ open, initial, onClose, onSave }) {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">
-                Application Deadline <span className="text-red-500">*</span>
+                Application Deadline (date & time){" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
-                type="date"
+                type="datetime-local"
                 value={form.deadline}
                 onChange={(e) =>
                   setForm({ ...form, deadline: e.target.value })
                 }
                 className="input"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                After this exact time, candidates will no longer be able to apply.
+              </p>
             </div>
           </div>
 
@@ -241,7 +292,15 @@ export default function JobModal({ open, initial, onClose, onSave }) {
             )}
             {!file && form.jdFilePath && (
               <p className="text-xs text-indigo-600 mt-1">
-                Current file: {form.jdFilePath.split("/").pop()}
+                Current file:{" "}
+                <a
+                  href={form.jdFilePath}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  {form.jdFilePath.split("/").pop()}
+                </a>
               </p>
             )}
           </div>
@@ -263,11 +322,7 @@ export default function JobModal({ open, initial, onClose, onSave }) {
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              className="btn flex-1"
-              disabled={uploading}
-            >
+            <button type="submit" className="btn flex-1" disabled={uploading}>
               {uploading
                 ? "Saving..."
                 : form.id

@@ -27,12 +27,26 @@ function requireAuth(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // We sign as { id, role, email } in routes/auth.js
+
+    // Try multiple possible keys for ID and role, then normalize.
+    const id = decoded.id || decoded.userId || decoded.uid || null;
+
+    const rawRole =
+      decoded.role ||
+      decoded.userRole ||
+      decoded.portal ||
+      decoded.accountType ||
+      null;
+
+    const role = rawRole ? String(rawRole).toUpperCase() : null;
+
     req.user = {
-      id: decoded.id || decoded.userId, // support both just in case
-      role: decoded.role,
-      email: decoded.email,
+      id,
+      role,          // always uppercased (e.g. "RECRUITER", "CANDIDATE")
+      email: decoded.email || decoded.userEmail || null,
+      _rawRole: rawRole, // for debugging
     };
+
     next();
   } catch (err) {
     console.error("JWT error:", err);
@@ -46,9 +60,22 @@ function requireRole(...allowedRoles) {
     if (!req.user) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    if (!allowedRoles.includes(req.user.role)) {
+
+    const userRole = req.user.role
+      ? String(req.user.role).toUpperCase()
+      : "";
+
+    const allowed = allowedRoles.map((r) => String(r).toUpperCase());
+
+    if (!allowed.includes(userRole)) {
+      console.warn("requireRole denied:", {
+        userId: req.user.id,
+        userRole: req.user.role,
+        allowedRoles,
+      });
       return res.status(403).json({ message: "Forbidden for this role" });
     }
+
     next();
   };
 }

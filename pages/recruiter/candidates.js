@@ -1,357 +1,396 @@
 // pages/recruiter/candidates.js
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import CandidatesTable from "../../components/recruiter/CandidatesTable";
+import CandidatesTable from "@/components/recruiter/CandidatesTable";
 
-const LS_KEY = "recruiter.candidates";
-
-const seed = [
-  {
-    id: crypto.randomUUID(),
-    name: "Cameron Williamson",
-    role: "Software Engineer",
-    score: 85,
-    status: "Applied",
-    resumeUrl: "",
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "Jenny Wilson",
-    role: "Data Analyst",
-    score: 82,
-    status: "Under Review",
-    resumeUrl: "",
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "Ralph Edwards",
-    role: "Software Engineer",
-    score: 88,
-    status: "Shortlisted",
-    resumeUrl: "",
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "Arjun Mehta",
-    role: "DevOps Engineer",
-    score: 76,
-    status: "Applied",
-    resumeUrl: "",
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "Priya Nair",
-    role: "Product Manager",
-    score: 91,
-    status: "Under Review",
-    resumeUrl: "",
-  },
-];
-
-function Candidates() {
+function RecruiterCandidatesPage() {
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [atsScores, setAtsScores] = useState({});
+  const [loadingScores, setLoadingScores] = useState(false);
   const [filters, setFilters] = useState({
     q: "",
     status: "All",
-    minScore: "",
+    minScore: 0,
   });
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const pollIntervalRef = useRef(null);
 
-  useEffect(() => {
+  // Load candidates from backend
+  const loadCandidates = async () => {
+    setLoading(true);
     try {
-      const raw = localStorage.getItem(LS_KEY);
-      setRows(raw ? JSON.parse(raw) : seed);
-    } catch {
-      setRows(seed);
+      const res = await fetch("/api/jobs/recruiter-candidates", {
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        alert("Not authenticated. Please log in again.");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login?role=recruiter";
+        }
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load candidates");
+      }
+      
+      // Merge with existing ATS scores
+      const candidatesWithScores = (data.candidates || []).map((candidate) => {
+        const scoreData = atsScores[candidate.email];
+        if (scoreData) {
+          return {
+            ...candidate,
+            score: Math.round(scoreData.overallScore) || 0,
+            atsData: scoreData,
+          };
+        }
+        return candidate;
+      });
+      
+      setRows(candidatesWithScores);
+    } catch (err) {
+      console.error("Error loading candidates:", err);
+      alert(err.message || "Failed to load candidates");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Load ATS scores from Firestore
+  const loadATSScores = async () => {
+    setLoadingScores(true);
+    try {
+      const res = await fetch("/api/candidates/ats-scores");
+      const data = await res.json();
+
+      if (data.success) {
+        const scores = data.scores || {};
+        setAtsScores(scores);
+
+        // Update rows with latest ATS scores
+        setRows((prevRows) =>
+          prevRows.map((row) => {
+            const scoreData = scores[row.email];
+            if (scoreData) {
+              return {
+                ...row,
+                score: Math.round(scoreData.overallScore) || row.score,
+                atsData: scoreData,
+              };
+            }
+            return row;
+          })
+        );
+      }
+    } catch (err) {
+      console.error("Error loading ATS scores:", err);
+    } finally {
+      setLoadingScores(false);
+    }
+  };
+
+  // Load candidates on mount
+  useEffect(() => {
+    loadCandidates();
   }, []);
 
+  // Load ATS scores on mount and set up polling
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(rows));
-    } catch {}
-  }, [rows]);
+    loadATSScores();
 
-  const setStatusForIds = (ids, status) => {
-    setRows((curr) =>
-      curr.map((c) => (ids.includes(c.id) ? { ...c, status } : c))
-    );
-  };
+    // Poll for score updates every 5 seconds
+    pollIntervalRef.current = setInterval(() => {
+      loadATSScores();
+    }, 5000);
 
-  const removeIds = (ids) => {
-    setRows((curr) => curr.filter((c) => !ids.includes(c.id)));
-  };
-
-  const onToggle = (id) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const onToggleAll = (visibleIds, checked) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        visibleIds.forEach((id) => next.add(id));
-      } else {
-        visibleIds.forEach((id) => next.delete(id));
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
-      return next;
-    });
-  };
+    };
+  }, []);
 
-  const onViewResume = (row) => {
-    if (row.resumeUrl) {
-      window.open(row.resumeUrl, "_blank");
-    } else {
-      alert(
-        "No resume URL set for this candidate. (You can extend this to open a detailed profile page.)"
-      );
-    }
-  };
-
-  const onChangeStatus = (id, status) => {
-    setRows((curr) => curr.map((c) => (c.id === id ? { ...c, status } : c)));
-  };
-
-  const onDelete = (id) => {
-    if (!confirm("Delete this candidate?")) return;
-    setRows((curr) => curr.filter((c) => c.id !== id));
+  const handleToggle = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.delete(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
-  const onBulk = (action) => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    if (action === "shortlist") setStatusForIds(ids, "Shortlisted");
-    if (action === "review") setStatusForIds(ids, "Under Review");
-    if (action === "reject") setStatusForIds(ids, "Rejected");
-    if (action === "delete") {
-      if (!confirm(`Delete ${ids.length} selected candidate(s)?`)) return;
-      removeIds(ids);
-    }
-    setSelectedIds(new Set());
+  const handleToggleAll = (ids, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => {
+        if (checked) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
   };
 
-  const counts = useMemo(() => {
-    const total = rows.length;
-    const byStatus = rows.reduce(
-      (acc, r) => {
-        acc[r.status] = (acc[r.status] || 0) + 1;
-        return acc;
-      },
-      { Applied: 0, "Under Review": 0, Shortlisted: 0, Rejected: 0 }
-    );
-    return { total, ...byStatus };
-  }, [rows]);
+  const updateStatus = async (applicationId, status) => {
+    try {
+      const res = await fetch(
+        `/api/jobs/applications/${applicationId}/status`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to update application");
+      }
+      await loadCandidates();
+    } catch (err) {
+      alert(err.message || "Failed to update application");
+    }
+  };
+
+  const handleBulk = async (action) => {
+    if (selectedIds.size === 0) return;
+
+    let status;
+    if (action === "review") status = "UNDER_REVIEW";
+    else if (action === "shortlist") status = "SHORTLISTED";
+    else if (action === "reject") status = "REJECTED";
+    if (!status) return;
+
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/jobs/applications/${id}/status`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          })
+        )
+      );
+      setSelectedIds(new Set());
+      await loadCandidates();
+    } catch (err) {
+      alert(err.message || "Failed to update selected applications");
+    }
+  };
+
+  const handleViewResume = (candidate) => {
+    if (!candidate.resumePath) {
+      alert("No resume uploaded for this candidate.");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.open(candidate.resumePath, "_blank");
+    }
+  };
+
+  // Calculate stats
+  const total = rows.length;
+  const applied = rows.filter((r) => r.status === "APPLIED").length;
+  const underReview = rows.filter((r) => r.status === "UNDER_REVIEW").length;
+  const shortlisted = rows.filter((r) => r.status === "SHORTLISTED").length;
+  const rejected = rows.filter((r) => r.status === "REJECTED").length;
+  const avgScore =
+    rows.length > 0
+      ? Math.round(rows.reduce((sum, r) => sum + (r.score || 0), 0) / rows.length)
+      : 0;
+
+  // Filter candidates based on filters
+  const filteredRows = rows.filter((row) => {
+    const matchesSearch =
+      !filters.q ||
+      row.name?.toLowerCase().includes(filters.q.toLowerCase()) ||
+      row.email?.toLowerCase().includes(filters.q.toLowerCase());
+
+    const matchesStatus =
+      filters.status === "All" || row.status === filters.status;
+
+    const matchesScore =
+      !filters.minScore || (row.score || 0) >= parseInt(filters.minScore);
+
+    return matchesSearch && matchesStatus && matchesScore;
+  });
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-10 pb-10">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">Candidates 👥</h1>
-        <p className="text-lg text-gray-600">
-          Review and manage your applicants across all stages
+        <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-2">
+          Candidates <span className="text-2xl">👥</span>
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Review and manage your applicants with real-time ATS scores
         </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        {/* Total Candidates */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-          <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
-            Total Candidates
+      {/* Summary cards - Updated with ATS info */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <SummaryCard label="Total Candidates" value={total} />
+        <SummaryCard label="Applied" value={applied} />
+        <SummaryCard label="Under Review" value={underReview} />
+        <SummaryCard
+          label="Shortlisted"
+          value={shortlisted}
+          accent="text-emerald-600"
+        />
+        <SummaryCard
+          label="Avg ATS Score"
+          value={`${avgScore}%`}
+          accent="text-indigo-600"
+        />
+      </div>
+
+      {/* Filter bar */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 hover:shadow-lg transition-shadow">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">All Candidates</h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Search, filter, and manage your candidate pipeline
+            </p>
           </div>
-          <div className="text-3xl font-bold text-gray-900 mb-1">
-            {counts.total}
+          <div className="flex gap-2">
+            <button
+              onClick={loadCandidates}
+              className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              🔄 Refresh Candidates
+            </button>
+            <button
+              onClick={loadATSScores}
+              disabled={loadingScores}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+                loadingScores
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+              }`}
+            >
+              {loadingScores ? "Updating Scores..." : "📊 Refresh Scores"}
+            </button>
           </div>
-          <div className="text-xs text-gray-500">All-time applicants</div>
         </div>
 
-        {/* Applied */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-          <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
-            Applied
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-2">
+              Search
+            </label>
+            <input
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="Name, email, or role..."
+              value={filters.q}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            />
           </div>
-          <div className="text-3xl font-bold text-blue-600 mb-1">
-            {counts.Applied}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              value={filters.status}
+              onChange={(e) =>
+                setFilters({ ...filters, status: e.target.value })
+              }
+            >
+              <option value="All">All Statuses</option>
+              <option value="APPLIED">Applied</option>
+              <option value="UNDER_REVIEW">Under Review</option>
+              <option value="SHORTLISTED">Shortlisted</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
           </div>
-          <div className="text-xs text-gray-500">New submissions</div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-2">
+              Min ATS Score
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="e.g. 70"
+              value={filters.minScore}
+              onChange={(e) =>
+                setFilters({ ...filters, minScore: e.target.value })
+              }
+            />
+          </div>
         </div>
 
-        {/* Under Review */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-          <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
-            Under Review
-          </div>
-          <div className="text-3xl font-bold text-amber-600 mb-1">
-            {counts["Under Review"]}
-          </div>
-          <div className="text-xs text-gray-500">In progress</div>
-        </div>
-
-        {/* Shortlisted */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-          <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
-            Shortlisted
-          </div>
-          <div className="text-3xl font-bold text-emerald-600 mb-1">
-            {counts.Shortlisted}
-          </div>
-          <div className="text-xs text-gray-500">Move to interviews</div>
-        </div>
-
-        {/* Rejected */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-          <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
-            Rejected
-          </div>
-          <div className="text-3xl font-bold text-red-600 mb-1">
-            {counts.Rejected}
-          </div>
-          <div className="text-xs text-gray-500">Not moving forward</div>
+        {/* Show filtered results count */}
+        <div className="text-xs text-gray-600 pt-2 border-t border-gray-100">
+          Showing <span className="font-semibold">{filteredRows.length}</span> of{" "}
+          <span className="font-semibold">{rows.length}</span> candidates
         </div>
       </div>
 
-      {/* Filters & Table */}
-      <div className="space-y-6">
-        {/* Section Header */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">All Candidates</h2>
-          <p className="text-sm text-gray-600">
-            Search, filter, and manage your candidate pipeline
-          </p>
-        </div>
-
-        {/* Filter Bar */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {/* Search */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Search
-              </label>
-              <input
-                type="text"
-                placeholder="Name, email, or role..."
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                value={filters.q}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, q: e.target.value }))
-                }
-              />
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Status
-              </label>
-              <select
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                value={filters.status}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, status: e.target.value }))
-                }
-              >
-                <option value="All">All Statuses</option>
-                <option value="Applied">Applied</option>
-                <option value="Under Review">Under Review</option>
-                <option value="Shortlisted">Shortlisted</option>
-                <option value="Rejected">Rejected</option>
-              </select>
-            </div>
-
-            {/* Min Score */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Min Score
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 80"
-                min="0"
-                max="100"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                value={filters.minScore}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, minScore: e.target.value }))
-                }
-              />
-            </div>
-
-            {/* Reset */}
-            <div className="flex items-end">
-              <button
-                onClick={() =>
-                  setFilters({ q: "", status: "All", minScore: "" })
-                }
-                className="w-full px-4 py-2 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
-              >
-                Reset Filters
-              </button>
-            </div>
+      {/* Bulk action indicator */}
+      {selectedIds.size > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-sm font-semibold text-indigo-900">
+            {selectedIds.size} candidate{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleBulk("review")}
+              className="px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-sm font-semibold rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              Move to Review
+            </button>
+            <button
+              onClick={() => handleBulk("shortlist")}
+              className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-semibold rounded-lg hover:bg-emerald-100 transition-colors"
+            >
+              Shortlist
+            </button>
+            <button
+              onClick={() => handleBulk("reject")}
+              className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 text-sm font-semibold rounded-lg hover:bg-red-100 transition-colors"
+            >
+              Reject
+            </button>
           </div>
-
-          {/* Bulk Actions */}
-          {selectedIds.size > 0 && (
-            <div className="border-t border-gray-100 pt-4 flex items-center justify-between">
-              <div className="text-sm font-semibold text-gray-900">
-                {selectedIds.size} candidate{selectedIds.size !== 1 ? "s" : ""} selected
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onBulk("review")}
-                  className="px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-sm font-semibold rounded-lg hover:bg-amber-100 transition-colors"
-                >
-                  Move to Review
-                </button>
-                <button
-                  onClick={() => onBulk("shortlist")}
-                  className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-semibold rounded-lg hover:bg-emerald-100 transition-colors"
-                >
-                  Shortlist
-                </button>
-                <button
-                  onClick={() => onBulk("reject")}
-                  className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 text-sm font-semibold rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => onBulk("delete")}
-                  className="px-3 py-2 bg-red-100 text-red-800 border border-red-300 text-sm font-semibold rounded-lg hover:bg-red-200 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
         </div>
+      )}
 
-        {/* Candidates Table */}
-        <CandidatesTable
-          rows={rows}
-          selectedIds={selectedIds}
-          onToggle={onToggle}
-          onToggleAll={onToggleAll}
-          onViewResume={onViewResume}
-          onChangeStatus={onChangeStatus}
-          onDelete={onDelete}
-          filters={filters}
-        />
+      {/* Candidates Table */}
+      <CandidatesTable
+        rows={filteredRows}
+        loading={loading}
+        filters={filters}
+        setFilters={setFilters}
+        selectedIds={selectedIds}
+        onToggle={handleToggle}
+        onToggleAll={handleToggleAll}
+        onChangeStatus={updateStatus}
+        onBulk={handleBulk}
+        onViewResume={handleViewResume}
+        atsScores={atsScores}
+      />
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, accent }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+        {label}
+      </div>
+      <div className={`text-3xl font-bold ${accent || "text-gray-900"}`}>
+        {value}
       </div>
     </div>
   );
 }
 
-Candidates.getLayout = function getLayout(page) {
+RecruiterCandidatesPage.getLayout = function getLayout(page) {
   return (
     <DashboardLayout role="RECRUITER" active="candidates">
       {page}
@@ -359,4 +398,4 @@ Candidates.getLayout = function getLayout(page) {
   );
 };
 
-export default Candidates;
+export default RecruiterCandidatesPage;

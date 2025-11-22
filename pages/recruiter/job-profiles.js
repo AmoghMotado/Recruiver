@@ -6,16 +6,18 @@ import JobModal from "@/components/recruiter/JobModal";
 
 function toDate(value) {
   if (!value) return null;
-
   if (value instanceof Date) return value;
 
-  // Firestore Timestamp { seconds, nanoseconds } or {_seconds,_nanoseconds}
+  // Firestore Timestamp (client or admin) support
   if (typeof value === "object") {
+    if (typeof value.toDate === "function") {
+      const d = value.toDate();
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
     const sec = value.seconds ?? value._seconds;
     if (typeof sec === "number") return new Date(sec * 1000);
   }
 
-  // ISO string / date string
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -31,6 +33,10 @@ function formatShortDate(value) {
 }
 
 function mapServerJobToTable(job) {
+  const deadlineDate = toDate(job.deadline);
+  const createdAtDate = toDate(job.createdAt);
+  const updatedAtDate = toDate(job.updatedAt);
+
   return {
     id: job.id,
     title: job.title,
@@ -38,13 +44,16 @@ function mapServerJobToTable(job) {
     location: job.location,
     salaryRange: job.salaryRange,
     experience: job.experience,
-    deadline: job.deadline ? formatShortDate(job.deadline) : "",
+    // pretty date for table
+    deadline: deadlineDate ? formatShortDate(deadlineDate) : "",
+    // raw value passed into the modal so it can build datetime-local string
+    rawDeadline: job.deadline || null,
     description: job.description,
     jdFilePath: job.jdFilePath,
     applicants: job.applicantsCount ?? (job.applications?.length || 0),
     status: job.status === "OPEN" || job.status === "Open" ? "Open" : "Closed",
-    updated: job.updatedAt ? formatShortDate(job.updatedAt) : "",
-    createdAt: job.createdAt ? formatShortDate(job.createdAt) : "",
+    updated: updatedAtDate ? formatShortDate(updatedAtDate) : "",
+    createdAt: createdAtDate ? formatShortDate(createdAtDate) : "",
   };
 }
 
@@ -83,6 +92,7 @@ function JobProfiles() {
         location: job.location || "",
         salaryRange: job.salaryRange || "",
         experience: job.experience || "",
+        // datetime-local string goes straight to backend
         deadline: job.deadline || "",
         description: job.description || "",
         jdFilePath: job.jdFilePath || "",
@@ -133,7 +143,10 @@ function JobProfiles() {
     }
   };
 
-  const totalApplicants = jobs.reduce((sum, j) => sum + (j.applicants || 0), 0);
+  const totalApplicants = jobs.reduce(
+    (sum, j) => sum + (j.applicants || 0),
+    0
+  );
   const activeJobs = jobs.filter((j) => j.status === "Open").length;
 
   return (
@@ -160,7 +173,9 @@ function JobProfiles() {
           <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
             Active Jobs
           </div>
-          <div className="text-3xl font-bold text-emerald-600">{activeJobs}</div>
+          <div className="text-3xl font-bold text-emerald-600">
+            {activeJobs}
+          </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
           <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">

@@ -1,7 +1,7 @@
 // components/candidate/JobCard.jsx
 import Link from "next/link";
 
-export default function JobCard({ job }) {
+export default function JobCard({ job, onApply }) {
   if (!job) return null;
 
   const {
@@ -12,12 +12,22 @@ export default function JobCard({ job }) {
     experience,
     stack,
     salaryRange,
+    postedDateLabel, // optional, if you map it in the page
   } = job;
 
   const tags = [];
   if (location) tags.push(location);
   if (experience) tags.push(experience);
   if (stack) tags.push(stack.split(",")[0]);
+  if (salaryRange) tags.push(`₹ ${salaryRange}`);
+  if (postedDateLabel) tags.push(`Posted ${postedDateLabel}`);
+
+  const handleApplyClick = (e) => {
+    if (onApply) {
+      e.preventDefault();
+      onApply(job);
+    }
+  };
 
   return (
     <article className="card p-4 flex flex-col gap-3">
@@ -47,8 +57,11 @@ export default function JobCard({ job }) {
         >
           View details
         </Link>
+
+        {/* If onApply is passed, we intercept click and open modal */}
         <Link
           href={`/candidate/job-profiles?id=${id ?? ""}#apply`}
+          onClick={handleApplyClick}
           className="btn-apply text-xs sm:text-sm"
         >
           Apply

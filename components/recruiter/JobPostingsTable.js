@@ -66,6 +66,9 @@ export default function JobPostingsTable({
                 Applicants
               </th>
               <th className="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
+                JD
+              </th>
+              <th className="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
                 Status
               </th>
               <th className="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
@@ -112,6 +115,20 @@ export default function JobPostingsTable({
                     </span>
                     <span className="text-indigo-600">👥</span>
                   </span>
+                </td>
+                <td className="px-8 py-4">
+                  {job.jdFilePath ? (
+                    <a
+                      href={job.jdFilePath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                    >
+                      View JD
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
                 </td>
                 <td className="px-8 py-4">
                   <span
