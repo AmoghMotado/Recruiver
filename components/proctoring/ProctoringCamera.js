@@ -1,9 +1,17 @@
 // components/proctoring/ProctoringCamera.js
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Shared AI proctoring camera for all exams.
+ *
+ * Props:
+ * - maxViolations: numeric limit; parent decides auto-submit on or before this.
+ * - onViolation: fn({ reason, type, count, max }) called when a violation is registered.
+ * - className: extra wrapper classes
+ */
 export default function ProctoringCamera({
   onViolation,
-  maxViolations = 3,
+  maxViolations = 5,
   className = "",
 }) {
   const videoRef = useRef(null);
@@ -15,6 +23,24 @@ export default function ProctoringCamera({
   const [status, setStatus] = useState("Camera initializing…");
   const [violationCount, setViolationCount] = useState(0);
 
+  // small grace thresholds → avoid flagging on 1 bad frame
+  const GRACE = {
+    noFaceFrames: 3,
+    multiFaceFrames: 2,
+    lookAwayFrames: 3,
+  };
+
+  const countersRef = useRef({
+    noFaceFrames: 0,
+    multiFaceFrames: 0,
+    lookAwayFrames: 0,
+  });
+
+  const lastViolationRef = useRef({
+    reason: null,
+    ts: 0,
+  });
+
   // Load TF + BlazeFace once
   useEffect(() => {
     let cancelled = false;
@@ -23,12 +49,13 @@ export default function ProctoringCamera({
       try {
         setLoadingModel(true);
         const tf = await import("@tensorflow/tfjs");
-        // Use WebGL backend if available for speed
-        if (tf.getBackend() !== "webgl" && tf.backend().isDisposed !== true) {
-          try {
+        try {
+          if (tf.getBackend() !== "webgl") {
             await tf.setBackend("webgl");
-            await tf.ready();
-          } catch {}
+          }
+          await tf.ready();
+        } catch {
+          // fallback to default backend silently
         }
         const blazeface = await import("@tensorflow-models/blazeface");
         const m = await blazeface.load();
@@ -78,7 +105,9 @@ export default function ProctoringCamera({
           videoRef.current.srcObject = s;
           try {
             await videoRef.current.play();
-          } catch {}
+          } catch {
+            // ignore autoplay issues
+          }
         }
         setStatus("Camera active. Proctoring running.");
       } catch (err) {
@@ -107,7 +136,28 @@ export default function ProctoringCamera({
     };
   }, [stream]);
 
-  // Simple face / gaze checks
+  const registerViolation = (reason, type = "camera") => {
+    setViolationCount((prev) => {
+      const next = prev + 1;
+
+      // debounce repeated same-reason spam (e.g. model jitter)
+      const now = Date.now();
+      if (
+        lastViolationRef.current.reason === reason &&
+        now - lastViolationRef.current.ts < 1500
+      ) {
+        return prev;
+      }
+      lastViolationRef.current = { reason, ts: now };
+
+      if (onViolation) {
+        onViolation({ reason, type, count: next, max: maxViolations });
+      }
+      return next;
+    });
+  };
+
+  // Simple face / gaze checks with grace
   useEffect(() => {
     if (!model || !permGranted || !videoRef.current) return;
 
@@ -119,22 +169,41 @@ export default function ProctoringCamera({
 
       try {
         const predictions = await model.estimateFaces(videoRef.current, false);
+        const counters = countersRef.current;
+
         if (!predictions || predictions.length === 0) {
-          flagViolation("No face detected");
+          counters.noFaceFrames += 1;
+          counters.multiFaceFrames = 0;
+          counters.lookAwayFrames = 0;
+
+          if (counters.noFaceFrames >= GRACE.noFaceFrames) {
+            registerViolation("No face detected", "camera");
+            counters.noFaceFrames = 0;
+          }
+
           setStatus("No face detected. Please stay in frame.");
           return;
         }
 
+        // exactly one face
         if (predictions.length > 1) {
-          flagViolation("Multiple faces detected");
+          counters.multiFaceFrames += 1;
+          counters.noFaceFrames = 0;
+          counters.lookAwayFrames = 0;
+
+          if (counters.multiFaceFrames >= GRACE.multiFaceFrames) {
+            registerViolation("Multiple faces detected", "camera");
+            counters.multiFaceFrames = 0;
+          }
+
           setStatus("Multiple faces detected. Only you should be visible.");
           return;
         }
 
-        // Single face – basic “gaze” heuristic using bounding box center
-        const face = predictions[0];
+        counters.noFaceFrames = 0;
+        counters.multiFaceFrames = 0;
 
-        // BlazeFace gives topLeft & bottomRight as [x, y]
+        const face = predictions[0];
         const [x1, y1] = face.topLeft;
         const [x2, y2] = face.bottomRight;
         const cx = (x1 + x2) / 2;
@@ -144,44 +213,39 @@ export default function ProctoringCamera({
         const nx = cx / video.videoWidth;
         const ny = cy / video.videoHeight;
 
-        // If face center far from middle of frame, assume looking away / moved
-        const offCenterX = Math.abs(nx - 0.5) > 0.3; // left/right
-        const offCenterY = ny < 0.25 || ny > 0.85; // too high/low
+        const offCenterX = Math.abs(nx - 0.5) > 0.35;
+        const offCenterY = ny < 0.2 || ny > 0.85;
 
         if (offCenterX || offCenterY) {
-          flagViolation("Possible looking away from screen");
+          counters.lookAwayFrames += 1;
+          if (counters.lookAwayFrames >= GRACE.lookAwayFrames) {
+            registerViolation("Possible looking away from screen", "camera");
+            counters.lookAwayFrames = 0;
+          }
+
           setStatus(
             "Please look at the screen. Frequent looking away may auto-submit your test."
           );
           return;
         }
 
-        // All good
+        // all good frame
+        counters.lookAwayFrames = 0;
         setStatus("Proctoring OK. Keep looking at the screen.");
       } catch (err) {
         console.error("Proctoring error:", err);
       }
     };
 
-    const flagViolation = (reason) => {
-      setViolationCount((prev) => {
-        const next = prev + 1;
-        if (onViolation) {
-          onViolation({ reason, count: next, max: maxViolations });
-        }
-        return next;
-      });
-    };
-
     intervalId = setInterval(() => {
       if (!cancelled) checkFrame();
-    }, 1500); // every 1.5s
+    }, 1500);
 
     return () => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [model, permGranted, onViolation, maxViolations]);
+  }, [model, permGranted, maxViolations, onViolation]);
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>

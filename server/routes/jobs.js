@@ -513,7 +513,7 @@ router.get(
       const jobsById = {};
       if (jobIds.length) {
         const chunks = [];
-        for (let i = 0; i < jobIds.length; i += 10) {
+        for (let i = 0; i < jobIds.length; i += 10; i += 1) {
           chunks.push(jobIds.slice(i, i + 10));
         }
         for (const chunk of chunks) {
@@ -601,10 +601,26 @@ router.get(
 
       const applicants = appsSnap.docs.map((doc) => {
         const data = doc.data();
+        const aptitudeSummary = data.aptitudeSummary || {};
+        const violationSummary = aptitudeSummary.violationSummary || {};
+        const totalViolations =
+          typeof violationSummary.totalViolations === "number"
+            ? violationSummary.totalViolations
+            : Array.isArray(aptitudeSummary.violations)
+            ? aptitudeSummary.violations.length
+            : 0;
+
         return {
           id: doc.id,
           ...data,
           candidate: usersById[data.studentId] || null,
+          // surfaced aptitude info for job-detail pipeline
+          aptitudeScore:
+            typeof data.score === "number" ? data.score : null,
+          aptitudeAutoSubmitted: !!aptitudeSummary.autoSubmitted,
+          aptitudeViolations: totalViolations,
+          aptitudeViolationSummary: violationSummary,
+          aptitudeSummary,
         };
       });
 
@@ -696,6 +712,15 @@ router.get(
             ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
             : user.name || "") || "Unknown";
 
+        const aptitudeSummary = app.aptitudeSummary || {};
+        const violationSummary = aptitudeSummary.violationSummary || {};
+        const totalViolations =
+          typeof violationSummary.totalViolations === "number"
+            ? violationSummary.totalViolations
+            : Array.isArray(aptitudeSummary.violations)
+            ? aptitudeSummary.violations.length
+            : 0;
+
         return {
           id: app.id,
           applicationId: app.id,
@@ -710,6 +735,13 @@ router.get(
           stage: app.stage ?? 1,
           appliedDate: app.createdAt || null,
           resumePath: app.resumePath || "",
+          // Round-2 aptitude surfaced cleanly for recruiter table
+          aptitudeScore:
+            typeof app.score === "number" ? app.score : null,
+          aptitudeAutoSubmitted: !!aptitudeSummary.autoSubmitted,
+          aptitudeViolations: totalViolations,
+          aptitudeViolationSummary: violationSummary,
+          aptitudeSummary,
         };
       });
 
@@ -717,20 +749,20 @@ router.get(
       candidates.sort((a, b) => {
         const ad = a.appliedDate
           ? new Date(
-              a.appliedDate._seconds
-                ? a.appliedDate._seconds * 1000
-                : a.appliedDate
+              adValue(a.appliedDate)
             )
           : 0;
         const bd = b.appliedDate
           ? new Date(
-              b.appliedDate._seconds
-                ? b.appliedDate._seconds * 1000
-                : b.appliedDate
+              adValue(b.appliedDate)
             )
           : 0;
         return bd - ad;
       });
+
+      function adValue(v) {
+        return v._seconds ? v._seconds * 1000 : v;
+      }
 
       return res.json({ candidates });
     } catch (err) {
@@ -741,9 +773,128 @@ router.get(
 );
 
 /**
+ * POST /api/jobs/applications/:id/aptitude-score
+ * Candidate submits Round 2 aptitude test score.
+ * Body: {
+ *   score: number,
+ *   summary?: {
+ *     total, correct, attempted, skipped,
+ *     autoSubmitted, byCategory,
+ *     violations, violationSummary,
+ *     startedAt, completedAt, durationSeconds, ...
+ *   }
+ * }
+ */
+router.post(
+  "/applications/:id/aptitude-score",
+  requireAuth,
+  requireRole("CANDIDATE"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { score, summary } = req.body || {};
+
+      const numericScore = Number(score);
+      if (Number.isNaN(numericScore)) {
+        return res.status(400).json({ message: "Invalid score" });
+      }
+
+      const appRef = db.collection("applications").doc(id);
+      const appSnap = await appRef.get();
+      if (!appSnap.exists) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const app = appSnap.data();
+
+      if (app.studentId !== req.user.id) {
+        return res.status(403).json({ message: "Not your application" });
+      }
+
+      const now = new Date();
+
+      // status progression: ensure candidate doesn't get downgraded
+      let nextStatus = app.status || "APPLIED";
+      if (nextStatus === "SHORTLISTED") {
+        nextStatus = "UNDER_REVIEW";
+      }
+
+      const updates = {
+        score: numericScore,
+        status: nextStatus,
+        stage: app.stage && app.stage > 2 ? app.stage : 2,
+        updatedAt: now,
+      };
+
+      if (summary && typeof summary === "object") {
+        // Normalize timing
+        const startedAt = summary.startedAt ? toDate(summary.startedAt) : null;
+        const completedAt = summary.completedAt
+          ? toDate(summary.completedAt)
+          : now;
+        const durationSeconds = Number(summary.durationSeconds);
+        const safeDuration = Number.isNaN(durationSeconds)
+          ? null
+          : durationSeconds;
+
+        // Normalize violations
+        const violations = Array.isArray(summary.violations)
+          ? summary.violations
+          : [];
+        const violationSummary =
+          summary.violationSummary && typeof summary.violationSummary === "object"
+            ? summary.violationSummary
+            : {};
+
+        const totalViolations =
+          typeof violationSummary.totalViolations === "number"
+            ? violationSummary.totalViolations
+            : violations.length;
+
+        updates.aptitudeSummary = {
+          ...summary,
+          startedAt: startedAt || null,
+          completedAt: completedAt || null,
+          durationSeconds: safeDuration,
+          violations,
+          violationSummary: {
+            ...violationSummary,
+            totalViolations,
+          },
+          lastUpdatedAt: now,
+        };
+
+        updates.aptitudeStartedAt = startedAt || app.aptitudeStartedAt || null;
+        updates.aptitudeCompletedAt = completedAt;
+        updates.aptitudeDurationSeconds = safeDuration;
+      }
+
+      await appRef.set(updates, { merge: true });
+      const updated = { id: appSnap.id, ...app, ...updates };
+
+      return res.json({
+        message: "Aptitude score recorded",
+        application: updated,
+      });
+    } catch (err) {
+      console.error(
+        "Error in POST /api/jobs/applications/:id/aptitude-score:",
+        err
+      );
+      return res
+        .status(500)
+        .json({ message: "Failed to record aptitude score" });
+    }
+  }
+);
+
+/**
  * POST /api/jobs/applications/:id/status
  * Recruiter updates an application's status / stage / score
- * Body: { status?: "APPLIED"|"UNDER_REVIEW"|"SHORTLISTED"|"REJECTED", stage?: number, score?: number }
+ * Body: {
+ *   status?: "APPLIED"|"UNDER_REVIEW"|"SHORTLISTED"|"REJECTED",
+ *   stage?: number,
+ *   score?: number
+ * }
  */
 router.post(
   "/applications/:id/status",

@@ -1,214 +1,385 @@
 // components/recruiter/CandidatesTable.js
-import { useMemo } from "react";
-
-const STATUS_LABEL = {
-  APPLIED: "Applied",
-  UNDER_REVIEW: "Under Review",
-  SHORTLISTED: "Shortlisted",
-  REJECTED: "Rejected",
-};
+import { useState } from "react";
 
 export default function CandidatesTable({
-  rows = [],
-  selectedIds = new Set(),
-  onToggle = () => {},
-  onToggleAll = () => {},
-  onViewResume = () => {},
-  onChangeStatus = () => {},
-  onBulk = () => {},
-  filters = { q: "", status: "All", minScore: 0 },
-  setFilters = () => {},
-  loading = false,
+  rows,
+  loading,
+  selectedIds,
+  onToggle,
+  onToggleAll,
+  onChangeStatus,
+  onViewResume,
+  atsScores,
 }) {
-  const visible = useMemo(() => {
-    const q = (filters?.q ?? "").toLowerCase();
-    const statusFilter = filters?.status ?? "All";
-    const min = Number(filters?.minScore ?? 0);
+  const [generatingATS, setGeneratingATS] = useState({});
+  const [atsResults, setAtsResults] = useState({});
 
-    return rows.filter((r) => {
-      const matchesQ =
-        !q ||
-        (r.name || "").toLowerCase().includes(q) ||
-        (r.jobTitle || "").toLowerCase().includes(q) ||
-        (r.email || "").toLowerCase().includes(q);
+  const handleGenerateATS = async (candidate) => {
+    if (!candidate.applicationId || !candidate.resumePath) {
+      alert("Missing application ID or resume path for this candidate.");
+      return;
+    }
 
-      const matchesStatus =
-        statusFilter === "All" || r.status === statusFilter;
+    setGeneratingATS((prev) => ({
+      ...prev,
+      [candidate.applicationId]: true,
+    }));
 
-      const matchesScore = (Number(r.score) || 0) >= min;
+    try {
+      const res = await fetch("/api/candidates/generate-ats-score", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: candidate.applicationId,
+          resumePath: candidate.resumePath,
+        }),
+      });
 
-      return matchesQ && matchesStatus && matchesScore;
-    });
-  }, [rows, filters]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to generate ATS score");
+      }
 
-  const allVisibleSelected =
-    visible.length > 0 && visible.every((r) => selectedIds.has(r.id));
-  const anySelected = selectedIds.size > 0;
+      setAtsResults((prev) => ({
+        ...prev,
+        [candidate.applicationId]: data.score,
+      }));
+    } catch (err) {
+      console.error("Generate ATS error:", err);
+      alert(err.message || "Failed to generate ATS score");
+    } finally {
+      setGeneratingATS((prev) => ({
+        ...prev,
+        [candidate.applicationId]: false,
+      }));
+    }
+  };
+
+  const getATSBadge = (score) => {
+    if (score >= 80)
+      return "bg-emerald-100 text-emerald-800 border-emerald-300";
+    if (score >= 60) return "bg-blue-100 text-blue-800 border-blue-300";
+    if (score >= 40) return "bg-amber-100 text-amber-800 border-amber-300";
+    return "bg-red-100 text-red-800 border-red-300";
+  };
+
+  const getScoreBadge = (score) => {
+    if (score === null || typeof score !== "number") return "";
+    if (score >= 80)
+      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    if (score >= 60) return "bg-blue-50 text-blue-800 border-blue-200";
+    if (score >= 40) return "bg-amber-50 text-amber-800 border-amber-200";
+    return "bg-red-50 text-red-800 border-red-200";
+  };
+
+  const getRecommendationBadge = (rec) => {
+    const base =
+      "inline-flex px-2 py-1 text-[11px] font-semibold rounded-full capitalize";
+    if (rec === "STRONG_FIT") return `${base} bg-emerald-100 text-emerald-800`;
+    if (rec === "GOOD_FIT") return `${base} bg-blue-100 text-blue-800`;
+    if (rec === "MODERATE_FIT")
+      return `${base} bg-amber-100 text-amber-800`;
+    if (rec === "WEAK_FIT") return `${base} bg-red-100 text-red-800`;
+    return `${base} bg-gray-100 text-gray-800`;
+  };
+
+  const getStatusBadge = (status) => {
+    const base =
+      "inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize";
+    if (status === "APPLIED")
+      return `${base} bg-blue-100 text-blue-800 border border-blue-200`;
+    if (status === "UNDER_REVIEW")
+      return `${base} bg-amber-100 text-amber-800 border border-amber-200`;
+    if (status === "SHORTLISTED")
+      return `${base} bg-emerald-100 text-emerald-800 border border-emerald-200`;
+    if (status === "REJECTED")
+      return `${base} bg-red-100 text-red-800 border border-red-200`;
+    return `${base} bg-gray-100 text-gray-800 border border-gray-200`;
+  };
 
   if (loading) {
     return (
-      <div className="card">
-        <div className="py-12 text-center text-gray-500">
-          Loading candidates...
+      <div className="bg-white border border-gray-200 rounded-xl p-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading candidates...</p>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="card">
-      {/* Bulk actions row inside table card */}
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="font-semibold text-lg">Candidates</h3>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className={`btn outline text-xs ${
-              !anySelected ? "opacity-60 cursor-not-allowed" : ""
-            }`}
-            disabled={!anySelected}
-            onClick={() => onBulk("review")}
-          >
-            Move to Review
-          </button>
-          <button
-            className={`btn outline text-xs ${
-              !anySelected ? "opacity-60 cursor-not-allowed" : ""
-            }`}
-            disabled={!anySelected}
-            onClick={() => onBulk("shortlist")}
-          >
-            Shortlist
-          </button>
-          <button
-            className={`btn ghost text-xs ${
-              !anySelected ? "opacity-60 cursor-not-allowed" : ""
-            }`}
-            disabled={!anySelected}
-            onClick={() => onBulk("reject")}
-          >
-            Reject
-          </button>
+  if (!rows.length) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-12">
+        <div className="text-center">
+          <div className="text-6xl mb-4">📭</div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            No Candidates Found
+          </h3>
+          <p className="text-gray-600">
+            No candidates match your current filters.
+          </p>
         </div>
       </div>
+    );
+  }
 
+  const allSelected = rows.every((r) => selectedIds.has(r.applicationId));
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-gray-500 text-xs uppercase">
+        <table className="w-full">
+          <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
             <tr>
-              <th className="py-2 pr-3">
+              <th className="px-6 py-4 text-left">
                 <input
                   type="checkbox"
-                  checked={allVisibleSelected}
+                  checked={allSelected && rows.length > 0}
                   onChange={(e) =>
                     onToggleAll(
-                      visible.map((v) => v.id),
+                      rows.map((r) => r.applicationId),
                       e.target.checked
                     )
                   }
+                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
               </th>
-              <th className="py-2 pr-4">Candidate</th>
-              <th className="py-2 pr-4">Job Applied</th>
-              <th className="py-2 pr-4">Score</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 pr-4">Applied On</th>
-              <th className="py-2 pr-4">Resume</th>
-              <th className="py-2 pr-4">Actions</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Candidate
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Job Applied
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                ATS Score
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Aptitude (Round 2)
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Applied On
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Resume
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
-          <tbody>
-            {visible.length === 0 && (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="py-6 text-center text-gray-400 text-sm"
-                >
-                  No candidates match the filters.
-                </td>
-              </tr>
-            )}
-            {visible.map((c) => {
-              const label = STATUS_LABEL[c.status] || "Applied";
+          <tbody className="divide-y divide-gray-200">
+            {rows.map((row) => {
+              const isSelected = selectedIds.has(row.applicationId);
+
+              const atsData =
+                atsResults[row.applicationId] || atsScores[row.email];
+              const isGenerating = generatingATS[row.applicationId];
+
+              const aptitudeScore =
+                typeof row.aptitudeScore === "number"
+                  ? row.aptitudeScore
+                  : null;
+              const aptitudeViolations = row.aptitudeViolations || 0;
+              const autoSubmit = !!row.aptitudeAutoSubmitted;
+
               return (
-                <tr key={c.id} className="border-t border-gray-100">
-                  <td className="py-3 pr-3 align-top">
+                <tr
+                  key={row.applicationId}
+                  className={`hover:bg-gray-50 transition-colors ${
+                    isSelected ? "bg-indigo-50/40" : ""
+                  }`}
+                >
+                  <td className="px-6 py-4">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(c.id)}
-                      onChange={() => onToggle(c.id)}
+                      checked={isSelected}
+                      onChange={() => onToggle(row.applicationId)}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
                   </td>
-                  <td className="py-3 pr-4 align-top">
-                    <div className="font-medium text-gray-900">{c.name}</div>
-                    <div className="text-xs text-gray-500">{c.email}</div>
-                  </td>
-                  <td className="py-3 pr-4 align-top">
-                    <div className="font-medium text-gray-900">
-                      {c.jobTitle}
+
+                  {/* Candidate */}
+                  <td className="px-6 py-4">
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {row.name || "N/A"}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {row.email || "—"}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">{c.company}</div>
                   </td>
-                  <td className="py-3 pr-4 align-top">
-                    <span className="font-semibold">
-                      {c.score != null ? c.score : 0}
+
+                  {/* Job */}
+                  <td className="px-6 py-4">
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {row.jobTitle || "—"}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {row.company || ""}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* ATS Score */}
+                  <td className="px-6 py-4 align-top">
+                    {atsData ? (
+                      <div className="space-y-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold border ${getATSBadge(
+                              atsData.overallScore
+                            )}`}
+                          >
+                            {atsData.overallScore}%
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-gray-600">
+                          <div className="flex justify-between">
+                            <span>Skills</span>
+                            <span className="font-semibold">
+                              {atsData.skillsMatch}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Experience</span>
+                            <span className="font-semibold">
+                              {atsData.experienceMatch}%
+                            </span>
+                          </div>
+                        </div>
+                        {atsData.recommendation && (
+                          <span
+                            className={getRecommendationBadge(
+                              atsData.recommendation
+                            )}
+                          >
+                            {atsData.recommendation.replace("_", " ")}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">
+                        Not generated
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Aptitude score + violations */}
+                  <td className="px-6 py-4 align-top">
+                    {aptitudeScore !== null ? (
+                      <div className="space-y-2 text-xs">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold border ${getScoreBadge(
+                            aptitudeScore
+                          )}`}
+                        >
+                          {aptitudeScore}%
+                        </span>
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <span className="text-[11px]">
+                            {aptitudeViolations} violation
+                            {aptitudeViolations === 1 ? "" : "s"}
+                          </span>
+                          {autoSubmit && (
+                            <span className="inline-flex px-2 py-0.5 rounded-full bg-red-50 text-[10px] font-semibold text-red-700 border border-red-200">
+                              Auto-submitted
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">Not taken</span>
+                    )}
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-6 py-4">
+                    <span className={getStatusBadge(row.status)}>
+                      {row.status.replace("_", " ")}
                     </span>
                   </td>
-                  <td className="py-3 pr-4 align-top">
-                    <span
-                      className={`px-2 py-1 rounded-md text-xs font-medium ${
-                        c.status === "SHORTLISTED"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : c.status === "UNDER_REVIEW"
-                          ? "bg-blue-100 text-blue-700"
-                          : c.status === "REJECTED"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4 align-top text-xs text-gray-500">
-                    {c.appliedDate
+
+                  {/* Applied date */}
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {row.appliedDate
                       ? new Date(
-                          c.appliedDate._seconds
-                            ? c.appliedDate._seconds * 1000
-                            : c.appliedDate
+                          row.appliedDate._seconds
+                            ? row.appliedDate._seconds * 1000
+                            : row.appliedDate
                         ).toLocaleDateString()
-                      : "—"}
+                      : "N/A"}
                   </td>
-                  <td className="py-3 pr-4 align-top">
-                    {c.resumePath ? (
+
+                  {/* Resume */}
+                  <td className="px-6 py-4">
+                    {row.resumePath ? (
                       <button
-                        className="text-xs text-indigo-600 underline font-medium"
-                        onClick={() => onViewResume(c)}
+                        onClick={() => onViewResume(row)}
+                        className="text-indigo-600 hover:text-indigo-800 text-sm font-semibold underline"
                       >
                         View Resume
                       </button>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-sm text-gray-400">No resume</span>
                     )}
                   </td>
-                  <td className="py-3 pr-4 align-top">
-                    <div className="flex flex-wrap gap-2">
+
+                  {/* Actions */}
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-2">
                       <button
-                        className="btn outline text-xs"
-                        onClick={() => onChangeStatus(c.id, "SHORTLISTED")}
-                        disabled={c.status === "SHORTLISTED"}
+                        onClick={() => handleGenerateATS(row)}
+                        disabled={isGenerating || !row.resumePath}
+                        className={`px-3 py-2 text-xs font-bold rounded-lg border transition-all ${
+                          isGenerating
+                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
+                            : !row.resumePath
+                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                            : atsData
+                            ? "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"
+                            : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100"
+                        }`}
                       >
-                        Shortlist
+                        {isGenerating
+                          ? "Generating..."
+                          : atsData
+                          ? "Regenerate ATS"
+                          : "Generate ATS"}
                       </button>
-                      <button
-                        className="btn ghost text-xs"
-                        onClick={() => onChangeStatus(c.id, "REJECTED")}
-                        disabled={c.status === "REJECTED"}
-                      >
-                        Reject
-                      </button>
+
+                      <div className="flex gap-2">
+                        {row.status !== "SHORTLISTED" && (
+                          <button
+                            onClick={() =>
+                              onChangeStatus(row.applicationId, "SHORTLISTED")
+                            }
+                            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg hover:bg-emerald-100 transition-colors"
+                          >
+                            Shortlist
+                          </button>
+                        )}
+                        {row.status !== "REJECTED" && (
+                          <button
+                            onClick={() =>
+                              onChangeStatus(row.applicationId, "REJECTED")
+                            }
+                            className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-xs font-semibold rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            Reject
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
-            );
+              );
             })}
           </tbody>
         </table>

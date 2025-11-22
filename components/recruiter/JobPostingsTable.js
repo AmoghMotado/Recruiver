@@ -6,6 +6,7 @@ export default function JobPostingsTable({
   onAddJob,
   onEditJob,
   onDeleteJob,
+  onConfigureAptitude, // ✅ NEW PROP
 }) {
   if (loading) {
     return (
@@ -93,21 +94,19 @@ export default function JobPostingsTable({
                     {job.company || "—"}
                   </div>
                 </td>
-                <td className="px-8 py-4">
-                  <span className="text-sm text-gray-700">
-                    {job.location || "—"}
-                  </span>
+
+                <td className="px-8 py-4 text-sm text-gray-700">
+                  {job.location || "—"}
                 </td>
-                <td className="px-8 py-4">
-                  <span className="text-sm text-gray-700">
-                    {job.experience || "—"}
-                  </span>
+
+                <td className="px-8 py-4 text-sm text-gray-700">
+                  {job.experience || "—"}
                 </td>
-                <td className="px-8 py-4">
-                  <span className="text-sm text-gray-700">
-                    {job.deadline || "—"}
-                  </span>
+
+                <td className="px-8 py-4 text-sm text-gray-700">
+                  {job.deadline || "—"}
                 </td>
+
                 <td className="px-8 py-4">
                   <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200">
                     <span className="text-sm font-bold text-indigo-700">
@@ -116,13 +115,13 @@ export default function JobPostingsTable({
                     <span className="text-indigo-600">👥</span>
                   </span>
                 </td>
+
                 <td className="px-8 py-4">
                   {job.jdFilePath ? (
                     <a
                       href={job.jdFilePath}
                       target="_blank"
-                      rel="noreferrer"
-                      className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                      className="text-sm font-semibold text-indigo-600 hover:text-indigo-800"
                     >
                       View JD
                     </a>
@@ -130,6 +129,7 @@ export default function JobPostingsTable({
                     <span className="text-xs text-gray-400">—</span>
                   )}
                 </td>
+
                 <td className="px-8 py-4">
                   <span
                     className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -141,13 +141,16 @@ export default function JobPostingsTable({
                     {job.status === "Open" ? "✓" : "–"} {job.status}
                   </span>
                 </td>
-                <td className="px-8 py-4">
-                  <span className="text-sm text-gray-600">
-                    {job.updated || "—"}
-                  </span>
+
+                <td className="px-8 py-4 text-sm text-gray-600">
+                  {job.updated || "—"}
                 </td>
+
+                {/* ACTIONS */}
                 <td className="px-8 py-4">
                   <div className="flex items-center justify-end gap-2">
+
+                    {/* ✏️ Edit */}
                     <button
                       onClick={() => onEditJob(job)}
                       className="p-2 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -155,6 +158,17 @@ export default function JobPostingsTable({
                     >
                       <span className="text-lg">✏️</span>
                     </button>
+
+                    {/* 🧠 Configure Aptitude Test — NEW */}
+                    <button
+                      onClick={() => onConfigureAptitude(job)}
+                      className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-200 transition-all"
+                      title="Configure Aptitude Test"
+                    >
+                      Aptitude Test ⚙️
+                    </button>
+
+                    {/* 🗑️ Delete */}
                     <button
                       onClick={() => onDeleteJob(job.id)}
                       className="p-2 hover:bg-red-50 rounded-lg transition-colors"
@@ -162,6 +176,7 @@ export default function JobPostingsTable({
                     >
                       <span className="text-lg">🗑️</span>
                     </button>
+
                   </div>
                 </td>
               </tr>

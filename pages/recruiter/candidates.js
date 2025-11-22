@@ -1,22 +1,27 @@
 // pages/recruiter/candidates.js
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CandidatesTable from "@/components/recruiter/CandidatesTable";
 
 function RecruiterCandidatesPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [atsScores, setAtsScores] = useState({});
   const [loadingScores, setLoadingScores] = useState(false);
+
   const [filters, setFilters] = useState({
     q: "",
     status: "All",
     minScore: 0,
   });
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const pollIntervalRef = useRef(null);
 
-  // Load candidates from backend
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const pollRef = useRef(null);
+
+  // ---------------------------------------------------------------------------
+  // Load candidates
+  // ---------------------------------------------------------------------------
   const loadCandidates = async () => {
     setLoading(true);
     try {
@@ -24,31 +29,25 @@ function RecruiterCandidatesPage() {
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        alert("Not authenticated. Please log in again.");
-        if (typeof window !== "undefined") {
-          window.location.href = "/login?role=recruiter";
-        }
-        return;
-      }
+
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to load candidates");
+        throw new Error(data.message || "Failed to load candidates");
       }
-      
-      // Merge with existing ATS scores
-      const candidatesWithScores = (data.candidates || []).map((candidate) => {
-        const scoreData = atsScores[candidate.email];
-        if (scoreData) {
-          return {
-            ...candidate,
-            score: Math.round(scoreData.overallScore) || 0,
-            atsData: scoreData,
-          };
-        }
-        return candidate;
+
+      const baseRows = data.candidates || [];
+
+      // Merge ATS scores if already loaded
+      const merged = baseRows.map((c) => {
+        const scoreData = atsScores[c.email];
+        return scoreData
+          ? {
+              ...c,
+              score: Math.round(scoreData.overallScore) || 0,
+            }
+          : c;
       });
-      
-      setRows(candidatesWithScores);
+
+      setRows(merged);
     } catch (err) {
       console.error("Error loading candidates:", err);
       alert(err.message || "Failed to load candidates");
@@ -57,32 +56,37 @@ function RecruiterCandidatesPage() {
     }
   };
 
-  // Load ATS scores from Firestore
+  // ---------------------------------------------------------------------------
+  // Load ATS scores
+  // ---------------------------------------------------------------------------
   const loadATSScores = async () => {
     setLoadingScores(true);
     try {
-      const res = await fetch("/api/candidates/ats-scores");
-      const data = await res.json();
+      const res = await fetch("/api/candidates/ats-scores", {
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (data.success) {
-        const scores = data.scores || {};
-        setAtsScores(scores);
-
-        // Update rows with latest ATS scores
-        setRows((prevRows) =>
-          prevRows.map((row) => {
-            const scoreData = scores[row.email];
-            if (scoreData) {
-              return {
-                ...row,
-                score: Math.round(scoreData.overallScore) || row.score,
-                atsData: scoreData,
-              };
-            }
-            return row;
-          })
-        );
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to load ATS scores");
       }
+
+      const scores = data.scores || {};
+      setAtsScores(scores);
+
+      // Merge into rows to compute avg etc
+      setRows((prev) =>
+        prev.map((row) => {
+          const scoreData = scores[row.email];
+          if (scoreData) {
+            return {
+              ...row,
+              score: Math.round(scoreData.overallScore) || row.score || 0,
+            };
+          }
+          return row;
+        })
+      );
     } catch (err) {
       console.error("Error loading ATS scores:", err);
     } finally {
@@ -90,27 +94,25 @@ function RecruiterCandidatesPage() {
     }
   };
 
-  // Load candidates on mount
+  // Initial load
   useEffect(() => {
     loadCandidates();
   }, []);
 
-  // Load ATS scores on mount and set up polling
+  // Initial ATS load + polling every 10s
   useEffect(() => {
     loadATSScores();
-
-    // Poll for score updates every 5 seconds
-    pollIntervalRef.current = setInterval(() => {
+    pollRef.current = setInterval(() => {
       loadATSScores();
-    }, 5000);
-
+    }, 10000);
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
+      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Selection + Status updates
+  // ---------------------------------------------------------------------------
   const handleToggle = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -144,21 +146,22 @@ function RecruiterCandidatesPage() {
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to update application");
+        throw new Error(data.message || "Failed to update application");
       }
       await loadCandidates();
     } catch (err) {
+      console.error("Update status error:", err);
       alert(err.message || "Failed to update application");
     }
   };
 
   const handleBulk = async (action) => {
-    if (selectedIds.size === 0) return;
+    if (!selectedIds.size) return;
 
-    let status;
+    let status = null;
     if (action === "review") status = "UNDER_REVIEW";
-    else if (action === "shortlist") status = "SHORTLISTED";
-    else if (action === "reject") status = "REJECTED";
+    if (action === "shortlist") status = "SHORTLISTED";
+    if (action === "reject") status = "REJECTED";
     if (!status) return;
 
     try {
@@ -175,6 +178,7 @@ function RecruiterCandidatesPage() {
       setSelectedIds(new Set());
       await loadCandidates();
     } catch (err) {
+      console.error("Bulk update error:", err);
       alert(err.message || "Failed to update selected applications");
     }
   };
@@ -184,34 +188,38 @@ function RecruiterCandidatesPage() {
       alert("No resume uploaded for this candidate.");
       return;
     }
-    if (typeof window !== "undefined") {
-      window.open(candidate.resumePath, "_blank");
-    }
+    window.open(candidate.resumePath, "_blank");
   };
 
-  // Calculate stats
+  // ---------------------------------------------------------------------------
+  // Stats & filters
+  // ---------------------------------------------------------------------------
   const total = rows.length;
   const applied = rows.filter((r) => r.status === "APPLIED").length;
   const underReview = rows.filter((r) => r.status === "UNDER_REVIEW").length;
   const shortlisted = rows.filter((r) => r.status === "SHORTLISTED").length;
-  const rejected = rows.filter((r) => r.status === "REJECTED").length;
+
+  const scored = rows.filter((r) => r.score && r.score > 0);
   const avgScore =
-    rows.length > 0
-      ? Math.round(rows.reduce((sum, r) => sum + (r.score || 0), 0) / rows.length)
+    scored.length > 0
+      ? Math.round(
+          scored.reduce((sum, r) => sum + (r.score || 0), 0) / scored.length
+        )
       : 0;
 
-  // Filter candidates based on filters
   const filteredRows = rows.filter((row) => {
+    const q = filters.q.trim().toLowerCase();
     const matchesSearch =
-      !filters.q ||
-      row.name?.toLowerCase().includes(filters.q.toLowerCase()) ||
-      row.email?.toLowerCase().includes(filters.q.toLowerCase());
+      !q ||
+      row.name?.toLowerCase().includes(q) ||
+      row.email?.toLowerCase().includes(q) ||
+      row.jobTitle?.toLowerCase().includes(q);
 
     const matchesStatus =
       filters.status === "All" || row.status === filters.status;
 
     const matchesScore =
-      !filters.minScore || (row.score || 0) >= parseInt(filters.minScore);
+      !filters.minScore || (row.score || 0) >= Number(filters.minScore || 0);
 
     return matchesSearch && matchesStatus && matchesScore;
   });
@@ -220,46 +228,53 @@ function RecruiterCandidatesPage() {
     <div className="space-y-10 pb-10">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
           Candidates <span className="text-2xl">👥</span>
         </h1>
-        <p className="text-gray-600 mt-2">
-          Review and manage your applicants with real-time ATS scores
+        <p className="text-gray-600 mt-2 text-lg">
+          Review and manage your applicants with real-time ATS insight.
         </p>
       </div>
 
-      {/* Summary cards - Updated with ATS info */}
+      {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <SummaryCard label="Total Candidates" value={total} />
-        <SummaryCard label="Applied" value={applied} />
-        <SummaryCard label="Under Review" value={underReview} />
+        <SummaryCard label="Total Candidates" value={total} icon="👥" />
+        <SummaryCard label="Applied" value={applied} icon="📝" />
+        <SummaryCard label="Under Review" value={underReview} icon="🔍" />
         <SummaryCard
           label="Shortlisted"
           value={shortlisted}
           accent="text-emerald-600"
+          icon="✅"
         />
         <SummaryCard
           label="Avg ATS Score"
-          value={`${avgScore}%`}
+          value={scored.length ? `${avgScore}%` : "N/A"}
           accent="text-indigo-600"
+          icon="🤖"
         />
       </div>
 
-      {/* Filter bar */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 hover:shadow-lg transition-shadow">
+      {/* Filters & refresh */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm hover:shadow-lg transition-shadow">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900">All Candidates</h2>
             <p className="text-xs text-gray-600 mt-1">
-              Search, filter, and manage your candidate pipeline
+              Search, filter, and generate ATS scores inline.
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={loadCandidates}
-              className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              disabled={loading}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                loading
+                  ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                  : "border-gray-300 hover:bg-gray-50"
+              }`}
             >
-              🔄 Refresh Candidates
+              {loading ? "⏳ Loading..." : "🔄 Refresh"}
             </button>
             <button
               onClick={loadATSScores}
@@ -267,10 +282,10 @@ function RecruiterCandidatesPage() {
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
                 loadingScores
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+                  : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-300"
               }`}
             >
-              {loadingScores ? "Updating Scores..." : "📊 Refresh Scores"}
+              {loadingScores ? "⏳ Updating..." : "📊 Refresh Scores"}
             </button>
           </div>
         </div>
@@ -278,18 +293,18 @@ function RecruiterCandidatesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">
-              Search
+              Search Candidates
             </label>
             <input
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              placeholder="Name, email, or role..."
+              placeholder="Name, email, or job title..."
               value={filters.q}
               onChange={(e) => setFilters({ ...filters, q: e.target.value })}
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">
-              Status
+              Status Filter
             </label>
             <select
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
@@ -307,7 +322,7 @@ function RecruiterCandidatesPage() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">
-              Min ATS Score
+              Minimum ATS Score
             </label>
             <input
               type="number"
@@ -323,53 +338,57 @@ function RecruiterCandidatesPage() {
           </div>
         </div>
 
-        {/* Show filtered results count */}
         <div className="text-xs text-gray-600 pt-2 border-t border-gray-100">
-          Showing <span className="font-semibold">{filteredRows.length}</span> of{" "}
+          Showing{" "}
+          <span className="font-semibold">{filteredRows.length}</span> of{" "}
           <span className="font-semibold">{rows.length}</span> candidates
+          {scored.length > 0 && (
+            <span className="ml-2">
+              • <span className="font-semibold">{scored.length}</span> with ATS
+              scores
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Bulk action indicator */}
+      {/* Bulk actions banner */}
       {selectedIds.size > 0 && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex items-center justify-between">
+        <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
           <span className="text-sm font-semibold text-indigo-900">
-            {selectedIds.size} candidate{selectedIds.size !== 1 ? "s" : ""} selected
+            {selectedIds.size} candidate
+            {selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => handleBulk("review")}
-              className="px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-sm font-semibold rounded-lg hover:bg-amber-100 transition-colors"
+              className="px-4 py-2 bg-amber-50 text-amber-700 border-2 border-amber-300 text-sm font-semibold rounded-lg hover:bg-amber-100 transition-all"
             >
-              Move to Review
+              📋 Move to Review
             </button>
             <button
               onClick={() => handleBulk("shortlist")}
-              className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-semibold rounded-lg hover:bg-emerald-100 transition-colors"
+              className="px-4 py-2 bg-emerald-50 text-emerald-700 border-2 border-emerald-300 text-sm font-semibold rounded-lg hover:bg-emerald-100 transition-all"
             >
-              Shortlist
+              ✅ Shortlist
             </button>
             <button
               onClick={() => handleBulk("reject")}
-              className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 text-sm font-semibold rounded-lg hover:bg-red-100 transition-colors"
+              className="px-4 py-2 bg-red-50 text-red-700 border-2 border-red-300 text-sm font-semibold rounded-lg hover:bg-red-100 transition-all"
             >
-              Reject
+              ❌ Reject
             </button>
           </div>
         </div>
       )}
 
-      {/* Candidates Table */}
+      {/* Table */}
       <CandidatesTable
         rows={filteredRows}
         loading={loading}
-        filters={filters}
-        setFilters={setFilters}
         selectedIds={selectedIds}
         onToggle={handleToggle}
         onToggleAll={handleToggleAll}
         onChangeStatus={updateStatus}
-        onBulk={handleBulk}
         onViewResume={handleViewResume}
         atsScores={atsScores}
       />
@@ -377,11 +396,14 @@ function RecruiterCandidatesPage() {
   );
 }
 
-function SummaryCard({ label, value, accent }) {
+function SummaryCard({ label, value, accent, icon }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
-        {label}
+    <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all hover:scale-105 cursor-default">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+          {label}
+        </div>
+        {icon && <span className="text-2xl">{icon}</span>}
       </div>
       <div className={`text-3xl font-bold ${accent || "text-gray-900"}`}>
         {value}

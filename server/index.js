@@ -28,6 +28,7 @@ app
     // JSON parser (skip for ATS multipart routes to avoid PayloadTooLargeError)
     const jsonParser = express.json({ limit: "2mb" });
     server.use((req, res, next) => {
+      // ATS microservice may handle its own body parsing (multipart, etc.)
       if (req.path.startsWith("/api/ats/")) {
         return next();
       }
@@ -48,8 +49,14 @@ app
     server.use("/api/jobs", require("./routes/jobs"));
     server.use("/api/profile", require("./routes/profile"));
 
-    // ✅ NEW unified ATS microservice
+    // ✅ NEW: recruiter candidates + ATS resume scoring
+    server.use("/api/candidates", require("./routes/candidates"));
+
+    // ✅ Unified ATS microservice (resume JD matching, etc.)
     server.use("/api/ats", require("./ats"));
+
+    // ✅ Aptitude test config + delivery (round 2)
+    server.use("/api/aptitude", require("./routes/aptitude"));
 
     server.use("/api/mock", require("./routes/mock"));
     server.use("/api/mock-interview", require("./routes/mockInterview"));

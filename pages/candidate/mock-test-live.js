@@ -12,7 +12,7 @@ const CATEGORY_LABELS = {
 };
 
 // ------------------------ QUESTION BANK ------------------------
-// 80+ questions, 20 per category. We will pick 15 per category (60 total).
+// (exactly the same questions you already have)
 const ALL_QUESTIONS = [
   // ---------- QUANT (20) ----------
   {
@@ -681,11 +681,12 @@ function buildRandomTest() {
   const quant = ALL_QUESTIONS.filter((q) => q.category === "quant");
   const logical = ALL_QUESTIONS.filter((q) => q.category === "logical");
   const verbal = ALL_QUESTIONS.filter((q) => q.category === "verbal");
-  const programming = ALL_QUESTIONS.filter((q) => q.category === "programming");
+  const programming = ALL_QUESTIONS.filter(
+    (q) => q.category === "programming"
+  );
 
   const pick = (arr, count) => shuffle(arr).slice(0, count);
 
-  // 15 from each category = 60 questions total
   const selected = [
     ...pick(quant, 15),
     ...pick(logical, 15),
@@ -702,7 +703,8 @@ const STATUS = {
   SKIPPED: "skipped",
 };
 
-const MAX_VIOLATIONS = 3;
+// 🔒 unified with Round-2 aptitude
+const MAX_VIOLATIONS = 5;
 
 function MockTestLiveInner() {
   const router = useRouter();
@@ -712,7 +714,7 @@ function MockTestLiveInner() {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [status, setStatus] = useState([]);
-  const [secondsLeft, setSecondsLeft] = useState(3600); // 60 minutes
+  const [secondsLeft, setSecondsLeft] = useState(3600);
   const [violations, setViolations] = useState([]);
   const [violationCount, setViolationCount] = useState(0);
 
@@ -726,17 +728,13 @@ function MockTestLiveInner() {
         prevDisplay = chatEl.style.display;
         chatEl.style.display = "none";
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     return () => {
-      if (chatEl) {
-        chatEl.style.display = prevDisplay;
-      }
+      if (chatEl) chatEl.style.display = prevDisplay;
     };
   }, []);
 
-  // Load / create question set + restore state if available
+  // Load / create question set + restore state
   useEffect(() => {
     try {
       const storedQs = JSON.parse(
@@ -790,9 +788,7 @@ function MockTestLiveInner() {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(t);
-          if (!hasSubmittedRef.current) {
-            handleSubmit(true);
-          }
+          if (!hasSubmittedRef.current) handleSubmit(true, "TIME_UP");
           return 0;
         }
         return prev - 1;
@@ -803,38 +799,37 @@ function MockTestLiveInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.length]);
 
-  // Persist remaining time
+  // Persist time
   useEffect(() => {
     try {
       localStorage.setItem("mockTest.timeLeft", String(secondsLeft));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [secondsLeft]);
 
-  // Register violation (tab switch, focus loss, face not detected, etc.)
-  const registerViolation = (reason) => {
+  // unified violation logger
+  const registerViolation = (source, reason) => {
     setViolations((prev) => {
-      const updated = [...prev, { ts: Date.now(), reason }];
+      const updated = [...prev, { ts: Date.now(), source, reason }];
       try {
-        localStorage.setItem("mockTest.violations", JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
+        localStorage.setItem(
+          "mockTest.violations",
+          JSON.stringify(updated)
+        );
+      } catch {}
       return updated;
     });
     setViolationCount((prev) => prev + 1);
   };
 
-  // Anti-cheat: tab / window focus events
+  // Anti-cheat: tab / window focus
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
-        registerViolation("Tab/Window hidden (visibilitychange)");
+        registerViolation("tab", "Tab hidden / switched away");
       }
     };
     const handleBlur = () => {
-      registerViolation("Window blur (possible tab switch)");
+      registerViolation("tab", "Window blur (possible tab switch)");
     };
 
     window.addEventListener("blur", handleBlur);
@@ -850,15 +845,15 @@ function MockTestLiveInner() {
   // Auto-submit on too many violations
   useEffect(() => {
     if (violationCount >= MAX_VIOLATIONS && !hasSubmittedRef.current) {
-      handleSubmit(true);
+      handleSubmit(true, "VIOLATION_LIMIT");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [violationCount]);
 
-  const question = useMemo(() => {
-    if (!questions.length) return null;
-    return questions[idx];
-  }, [questions, idx]);
+  const question = useMemo(
+    () => (questions.length ? questions[idx] : null),
+    [questions, idx]
+  );
 
   const mmss = useMemo(() => {
     const m = Math.floor(secondsLeft / 60)
@@ -876,9 +871,7 @@ function MockTestLiveInner() {
       }
       try {
         localStorage.setItem("mockTest.status", JSON.stringify(copy));
-      } catch {
-        // ignore
-      }
+      } catch {}
       return copy;
     });
   };
@@ -889,9 +882,7 @@ function MockTestLiveInner() {
     setAnswers(newAns);
     try {
       localStorage.setItem("mockTest.answers", JSON.stringify(newAns));
-    } catch {
-      // ignore
-    }
+    } catch {}
     updateStatus(idx, STATUS.ATTEMPTED);
   };
 
@@ -917,7 +908,7 @@ function MockTestLiveInner() {
     goNext();
   };
 
-  const handleSubmit = (auto = false) => {
+  const handleSubmit = (auto = false, reason = null) => {
     if (!questions.length) return;
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
@@ -957,14 +948,13 @@ function MockTestLiveInner() {
           attempted,
           skipped,
           autoSubmitted: auto,
+          autoReason: reason,
           byCategory,
           violations,
         })
       );
       localStorage.removeItem("mockTest.timeLeft");
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     router.push("/candidate/mock-test-result");
   };
@@ -1037,15 +1027,15 @@ function MockTestLiveInner() {
             </div>
           </div>
 
-          {/* AI proctoring camera (face / attention detection) */}
           <ProctoringCamera
             maxViolations={MAX_VIOLATIONS}
-            onViolation={({ reason }) => registerViolation(reason)}
+            onViolation={({ reason, type }) =>
+              registerViolation(type || "camera", reason)
+            }
           />
         </div>
       </div>
 
-      {/* Attention / Violation Banner */}
       {violationCount > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
           <p className="text-sm text-yellow-900">
@@ -1057,7 +1047,7 @@ function MockTestLiveInner() {
         </div>
       )}
 
-      {/* Question + text */}
+      {/* Question */}
       <div className="bg-white rounded-xl border border-gray-200 p-8">
         <div className="flex items-start justify-between gap-8">
           <div>
@@ -1122,7 +1112,7 @@ function MockTestLiveInner() {
               </button>
             ) : (
               <button
-                onClick={() => handleSubmit(false)}
+                onClick={() => handleSubmit(false, "MANUAL_SUBMIT")}
                 className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg transition-all"
               >
                 ✓ Submit
@@ -1132,7 +1122,7 @@ function MockTestLiveInner() {
         </div>
       </div>
 
-      {/* Question Navigator */}
+      {/* Navigator */}
       <div className="bg-white rounded-xl border border-gray-200 p-8">
         <h3 className="text-lg font-bold text-gray-900 mb-4">
           Question Navigator
@@ -1144,7 +1134,8 @@ function MockTestLiveInner() {
             if (s === STATUS.VISITED) bgColor = "bg-blue-500";
             if (s === STATUS.ATTEMPTED) bgColor = "bg-emerald-500";
             if (s === STATUS.SKIPPED) bgColor = "bg-orange-500";
-            const active = i === idx ? "ring-2 ring-offset-2 ring-indigo-500" : "";
+            const active =
+              i === idx ? "ring-2 ring-offset-2 ring-indigo-500" : "";
             return (
               <button
                 key={q.id}

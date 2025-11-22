@@ -1,5 +1,6 @@
 // pages/recruiter/job-profiles.js
 import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import DashboardLayout from "@/components/DashboardLayout";
 import JobPostingsTable from "@/components/recruiter/JobPostingsTable";
 import JobModal from "@/components/recruiter/JobModal";
@@ -58,6 +59,8 @@ function mapServerJobToTable(job) {
 }
 
 function JobProfiles() {
+  const router = useRouter();
+
   const [jobs, setJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
 
@@ -149,6 +152,12 @@ function JobProfiles() {
   );
   const activeJobs = jobs.filter((j) => j.status === "Open").length;
 
+  // NEW: when recruiter clicks "Configure Aptitude Test"
+  const handleConfigureAptitude = (job) => {
+    if (!job?.id) return;
+    router.push(`/recruiter/aptitude/${job.id}`);
+  };
+
   return (
     <div className="space-y-12">
       {/* Header */}
@@ -219,6 +228,8 @@ function JobProfiles() {
             setJobModalOpen(true);
           }}
           onDeleteJob={onDeleteJob}
+          // ✨ NEW: opens the Aptitude Editor for this job
+          onConfigureAptitude={handleConfigureAptitude}
         />
       </div>
 
