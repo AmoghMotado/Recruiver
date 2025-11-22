@@ -23,10 +23,9 @@ export default function LiveMockInterview() {
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [transcript, setTranscript] = useState("");
-  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes per question
+  const [timeLeft, setTimeLeft] = useState(120);
   const [stream, setStream] = useState(null);
 
-  // Initialize webcam and microphone
   useEffect(() => {
     let mounted = true;
 
@@ -63,7 +62,6 @@ export default function LiveMockInterview() {
     };
   }, []);
 
-  // Countdown timer for answer
   useEffect(() => {
     if (isRecording && timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
@@ -123,7 +121,6 @@ export default function LiveMockInterview() {
     setStatus("processing");
 
     try {
-      // Simulate AI analysis (replace with real API call)
       const mockScores = {
         appearance: Math.floor(Math.random() * 20) + 70,
         language: Math.floor(Math.random() * 20) + 70,
@@ -145,7 +142,6 @@ export default function LiveMockInterview() {
       setAnswers(newAnswers);
       setTranscript("");
 
-      // Move to next question or finish
       if (currentQuestion < INTERVIEW_QUESTIONS.length - 1) {
         setCurrentQuestion(currentQuestion + 1);
         setStatus("ready");
@@ -162,7 +158,6 @@ export default function LiveMockInterview() {
   const finishInterview = async (finalAnswers) => {
     setStatus("complete");
 
-    // Calculate overall scores
     let totalAppearance = 0,
       totalLanguage = 0,
       totalConfidence = 0,
@@ -186,7 +181,6 @@ export default function LiveMockInterview() {
       knowledge: Math.round(totalKnowledge / count),
     };
 
-    // Submit to backend
     try {
       const res = await fetch("/api/mock-interview/attempts", {
         method: "POST",
@@ -196,12 +190,10 @@ export default function LiveMockInterview() {
 
       if (!res.ok) throw new Error("Failed to save results");
 
-      // Cleanup stream
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
 
-      // Redirect after 3 seconds
       setTimeout(() => {
         router.push("/candidate/ai-mock-interview");
       }, 3000);
@@ -219,27 +211,12 @@ export default function LiveMockInterview() {
 
   if (status === "setup") {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "80vh",
-        }}
-      >
-        <div className="card" style={{ padding: 40, textAlign: "center" }}>
-          <div
-            style={{
-              fontSize: 48,
-              animation: "spin 1s linear infinite",
-              marginBottom: 20,
-            }}
-          >
-            ⚙️
-          </div>
-          <h2>Setting up your interview...</h2>
-          <p style={{ color: "var(--muted)", marginTop: 10 }}>
-            Please allow camera and microphone access
+      <div className="flex items-center justify-center min-h-[80vh]">
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center max-w-sm">
+          <div className="text-6xl mb-6 animate-spin">⚙️</div>
+          <h2 className="text-2xl font-bold text-gray-900">Setting up your interview…</h2>
+          <p className="text-base text-gray-600 mt-4">
+            Please allow camera and microphone access to continue
           </p>
         </div>
       </div>
@@ -248,19 +225,12 @@ export default function LiveMockInterview() {
 
   if (status === "complete") {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "80vh",
-        }}
-      >
-        <div className="card" style={{ padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 64, marginBottom: 20 }}>🎉</div>
-          <h2 style={{ fontSize: 28, fontWeight: 800 }}>Interview Complete!</h2>
-          <p style={{ color: "var(--muted)", marginTop: 10 }}>
-            Your responses have been analyzed. Redirecting to results...
+      <div className="flex items-center justify-center min-h-[80vh]">
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-12 text-center max-w-md">
+          <div className="text-7xl mb-6">🎉</div>
+          <h2 className="text-3xl font-bold text-gray-900">Interview Complete!</h2>
+          <p className="text-lg text-gray-600 mt-4">
+            Your responses are being analyzed. Redirecting to results…
           </p>
         </div>
       </div>
@@ -268,166 +238,134 @@ export default function LiveMockInterview() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div className="card" style={{ padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h2 style={{ fontSize: 24, fontWeight: 800 }}>
+            <h1 className="text-4xl font-bold text-gray-900">
               Question {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length}
-            </h2>
-            <p style={{ color: "var(--muted)", marginTop: 4 }}>
-              Answer the question clearly and confidently
+            </h1>
+            <p className="text-lg text-gray-600 mt-2">
+              Answer clearly and confidently. You have up to 2 minutes.
             </p>
           </div>
           <div
-            style={{
-              fontSize: 32,
-              fontWeight: 800,
-              color: timeLeft < 30 ? "#ef4444" : "#3b82f6",
-            }}
+            className={`text-5xl font-bold font-mono ${
+              timeLeft < 30 ? "text-red-600" : "text-indigo-600"
+            }`}
           >
-            {isRecording ? formatTime(timeLeft) : "--:--"}
+            {isRecording ? formatTime(timeLeft) : "00:00"}
           </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
-        {/* Left: Video */}
-        <div className="card" style={{ padding: 20 }}>
-          <div
-            style={{
-              position: "relative",
-              background: "#000",
-              borderRadius: 12,
-              overflow: "hidden",
-              aspectRatio: "16/9",
-            }}
-          >
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Video Feed (2 cols) */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-8">
+          <div className="relative bg-black rounded-xl overflow-hidden aspect-video mb-6">
             <video
               ref={videoRef}
               autoPlay
               muted
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
+              className="w-full h-full object-cover"
             />
 
             {countdown > 0 && countdown < 4 && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  fontSize: 120,
-                  fontWeight: 900,
-                  color: "#fff",
-                  textShadow: "0 0 20px rgba(0,0,0,0.5)",
-                }}
-              >
-                {countdown}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-9xl font-black text-white drop-shadow-2xl animate-bounce">
+                  {countdown}
+                </div>
               </div>
             )}
 
             {isRecording && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: 20,
-                  left: 20,
-                  background: "#ef4444",
-                  color: "#fff",
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <div
-                  style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    background: "#fff",
-                    animation: "pulse 1.5s ease-in-out infinite",
-                  }}
-                />
+              <div className="absolute top-6 left-6 flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-bold">
+                <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
                 RECORDING
               </div>
             )}
           </div>
 
           {/* Controls */}
-          <div style={{ marginTop: 20, display: "flex", gap: 12, justifyContent: "center" }}>
+          <div className="flex gap-4 justify-center">
             {!isRecording ? (
               <button
-                className="btn primary"
                 onClick={startRecording}
-                style={{ fontSize: 18, padding: "12px 32px" }}
+                className="px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition-all"
               >
-                Start Answer
+                🎤 Start Answer
               </button>
             ) : (
               <button
-                className="btn"
                 onClick={handleStopRecording}
-                style={{
-                  fontSize: 18,
-                  padding: "12px 32px",
-                  background: "#ef4444",
-                }}
+                className="px-8 py-4 text-lg font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all"
               >
-                Stop & Submit
+                ⏹️ Stop & Submit
               </button>
             )}
           </div>
         </div>
 
         {/* Right: Question & Tips */}
-        <div className="space-y-4">
-          <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ fontWeight: 700, marginBottom: 12 }}>Your Question:</h3>
-            <p style={{ fontSize: 18, lineHeight: 1.6 }}>
+        <div className="space-y-6">
+          {/* Question Card */}
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-wide mb-3">
+              Your Question
+            </h3>
+            <p className="text-xl font-semibold text-gray-900 leading-relaxed">
               {INTERVIEW_QUESTIONS[currentQuestion]}
             </p>
           </div>
 
-          <div className="card" style={{ padding: 20 }}>
-            <h4 style={{ fontWeight: 700, marginBottom: 8 }}>💡 Tips</h4>
-            <ul style={{ fontSize: 13, color: "var(--muted)", paddingLeft: 20, lineHeight: 1.8 }}>
-              <li>Maintain eye contact with camera</li>
-              <li>Speak clearly and at a moderate pace</li>
-              <li>Use specific examples</li>
-              <li>Keep answers between 1-2 minutes</li>
-              <li>Show enthusiasm and confidence</li>
+          {/* Tips Card */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 p-8">
+            <h4 className="text-lg font-bold text-gray-900 mb-4">💡 Interview Tips</h4>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li className="flex gap-2">
+                <span>👀</span> <span>Maintain eye contact with camera</span>
+              </li>
+              <li className="flex gap-2">
+                <span>🗣️</span> <span>Speak clearly at moderate pace</span>
+              </li>
+              <li className="flex gap-2">
+                <span>📖</span> <span>Use specific examples</span>
+              </li>
+              <li className="flex gap-2">
+                <span>⏱️</span> <span>Keep answers 1-2 minutes</span>
+              </li>
+              <li className="flex gap-2">
+                <span>😊</span> <span>Show enthusiasm & confidence</span>
+              </li>
             </ul>
           </div>
 
-          <div className="card" style={{ padding: 20 }}>
-            <h4 style={{ fontWeight: 700, marginBottom: 8 }}>📊 Progress</h4>
-            <div style={{ display: "flex", gap: 8 }}>
+          {/* Progress Card */}
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide mb-4">
+              📊 Progress
+            </h4>
+            <div className="flex gap-2">
               {INTERVIEW_QUESTIONS.map((_, idx) => (
                 <div
                   key={idx}
+                  className="flex-1 h-3 rounded-full transition-all"
                   style={{
-                    flex: 1,
-                    height: 8,
-                    borderRadius: 4,
                     background:
                       idx < currentQuestion
-                        ? "#10b981"
+                        ? "linear-gradient(90deg, #10b981, #34d399)"
                         : idx === currentQuestion
-                        ? "#3b82f6"
-                        : "rgba(255,255,255,0.1)",
+                        ? "linear-gradient(90deg, #4f46e5, #6366f1)"
+                        : "#e5e7eb",
                   }}
                 />
               ))}
             </div>
+            <p className="text-xs text-gray-600 mt-3 text-center">
+              {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length} questions
+            </p>
           </div>
         </div>
       </div>
@@ -438,14 +376,19 @@ export default function LiveMockInterview() {
             transform: rotate(360deg);
           }
         }
-        @keyframes pulse {
-          0%,
-          100% {
-            opacity: 1;
+        @keyframes bounce {
+          0%, 100% {
+            transform: scale(1);
           }
           50% {
-            opacity: 0.3;
+            transform: scale(1.1);
           }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+        .animate-bounce {
+          animation: bounce 1s ease-in-out infinite;
         }
       `}</style>
     </div>

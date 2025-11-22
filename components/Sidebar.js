@@ -1,4 +1,3 @@
-// components/Sidebar.js
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -13,21 +12,18 @@ import {
   Users,
   Calendar,
   BarChart3,
-  HelpCircle,
-  Building2, // icon for company profile
+  Building2,
 } from "lucide-react";
+import { TOPBAR_H } from "./AppHeader"; // keep in sync with header height
 
 export default function Sidebar({ role = "CANDIDATE", active }) {
   const router = useRouter();
   const roleSafe = String(role || "CANDIDATE").toUpperCase();
   const isCandidate = roleSafe === "CANDIDATE";
 
-  // Always use the real path for route-based matching
   const path = router.pathname || "";
 
-  /* ---------------------------------------------
-     CANDIDATE NAVIGATION
-  ----------------------------------------------*/
+  /* CANDIDATE NAVIGATION */
   const candidateLinks = [
     {
       id: "dashboard",
@@ -79,9 +75,7 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
     },
   ];
 
-  /* ---------------------------------------------
-     RECRUITER NAVIGATION
-  ----------------------------------------------*/
+  /* RECRUITER NAVIGATION */
   const recruiterLinks = [
     {
       id: "dashboard",
@@ -89,15 +83,12 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
       href: "/recruiter/dashboard",
       icon: LayoutDashboard,
     },
-
-    // Company Profile ABOVE Jobs
     {
       id: "company-profile",
       label: "Company Profile",
       href: "/recruiter/profile",
       icon: Building2,
     },
-
     {
       id: "jobs",
       label: "Jobs",
@@ -131,27 +122,32 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
   ];
 
   const links = isCandidate ? candidateLinks : recruiterLinks;
-  const helpHref = isCandidate ? "/candidate/help" : "/recruiter/help";
   const portalLabel = isCandidate ? "Candidate Portal" : "Recruiter Portal";
 
   return (
-    <aside className="dashboard-sidebar card flex flex-col justify-between">
+    <aside
+      className="dashboard-sidebar card flex flex-col"
+      style={{
+        position: "sticky",
+        top: TOPBAR_H + 16,
+        alignSelf: "flex-start",
+        height: `calc(100vh - ${TOPBAR_H + 32}px)`,
+        overflowY: "auto",
+      }}
+    >
       <div>
         <div className="text-xs font-semibold text-gray-500 tracking-wide uppercase mb-1">
           Recruiver
         </div>
         <div className="text-sm text-gray-400 mb-4">{portalLabel}</div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-2 mt-1">
           {links.map((link) => {
             const Icon = link.icon;
 
             const isActive =
-              // explicit active id from layout
               active === link.id ||
-              // special case: job-profiles page passing active="job-profiles"
               (link.id === "jobs" && active === "job-profiles") ||
-              // route-based matching
               path === link.href ||
               (typeof path === "string" && path.startsWith(link.href));
 
@@ -166,22 +162,14 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
                   isActive ? "active" : "",
                 ].join(" ")}
               >
-                <Icon size={18} className="shrink-0" />
-                <span className="truncate text-sm">{link.label}</span>
+                <Icon size={20} className="shrink-0" />
+                <span className="truncate text-[15px] font-semibold">
+                  {link.label}
+                </span>
               </Link>
             );
           })}
         </nav>
-      </div>
-
-      <div className="pt-4 mt-4 border-t border-gray-100">
-        <Link
-          href={helpHref}
-          className="sidebar-link text-gray-500 hover:text-gray-700"
-        >
-          <HelpCircle size={18} className="shrink-0" />
-          <span className="truncate text-sm">Help</span>
-        </Link>
       </div>
     </aside>
   );

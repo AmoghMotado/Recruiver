@@ -2,120 +2,199 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
 
-const faqItems = [
-  {
-    q: "How does ATS work here?",
-    a:
-      "We parse your resume against the job description, extract skills/experience/education, and compute matching signals. Recruiters see a concise view to shortlist faster.",
-  },
-  {
-    q: "What are the typical rounds?",
-    a:
-      "R1: Resume + ATS shortlisting. R2: Aptitude/technical (can be proctored). R3: Structured interview or video responses with AI-assisted summaries.",
-  },
-  {
-    q: "Is the aptitude test proctored?",
-    a:
-      "If enabled by the recruiter/TPO, we monitor focus switches and camera snapshots as allowed by policy. Proctoring level is visible before you start.",
-  },
-  {
-    q: "How is my data used?",
-    a:
-      "Only for hiring workflows you participate in. We minimize collection, retain data for required durations, and never sell personal data.",
-  },
-  {
-    q: "How do I sign in with Google?",
-    a:
-      "From Login, choose your Role, then click “Sign in with Google.” If your institute uses SSO, ensure you’re logged into the correct Google account.",
-  },
-  {
-    q: "I get a role mismatch error on login.",
-    a:
-      "Pick the correct role (Candidate or Recruiter) before logging in. Accounts are role-scoped for the right dashboard and permissions.",
-  },
-  {
-    q: "Can I update my resume after applying?",
-    a:
-      "Yes. Upload a new resume from your dashboard. Recruiters will see the most recent version and your ATS score will refresh.",
-  },
-  {
-    q: "How is the ATS score calculated?",
-    a:
-      "We map your skills/keywords against the JD, check seniority/experience alignment, and weigh recency and relevancy. Scores are directional, not absolute.",
-  },
-  {
-    q: "What if I face an issue during a test?",
-    a:
-      "Use the ‘Report an issue’ link shown inside the test page. If your internet drops, rejoin using the same link—progress is autosaved when possible.",
-  },
-  {
-    q: "What’s the difference between Candidate and Recruiter dashboards?",
-    a:
-      "Candidates track applications, tests, and interviews. Recruiters configure pipelines, review shortlists, and move candidates across stages.",
-  },
-];
+const faqCategories = {
+  "Getting Started": [
+    {
+      q: "What is Recruiver?",
+      a: "Recruiver is an AI-powered hiring platform that helps organizations and universities run fair, structured, and efficient hiring processes. We combine resume parsing, aptitude testing, video interviews, and candidate tracking in one platform.",
+    },
+    {
+      q: "How do I sign up?",
+      a: "Sign up is simple: Visit the login page, select your role (Candidate or Recruiter), and click 'Sign in with Google.' If your institute uses SSO, use your institutional email. Make sure you're logged into the correct Google account.",
+    },
+    {
+      q: "Why do I need to choose a role during signup?",
+      a: "Roles determine your dashboard experience and permissions. Candidates see applications and practice tools. Recruiters manage pipelines and make hiring decisions. Your role-specific dashboard is optimized for your workflow.",
+    },
+  ],
+  "For Candidates": [
+    {
+      q: "How does resume parsing and ATS scoring work?",
+      a: "When you upload your resume, our AI extracts your skills, experience, education, and keywords. We compare this against the job description to calculate an ATS score based on keyword coverage, skill alignment, and experience relevance. The score is directional and helps recruiters understand your fit quickly.",
+    },
+    {
+      q: "Can I update my resume after applying?",
+      a: "Yes! Upload a new version from your dashboard anytime. Recruiters will see your most recent resume, and your ATS score will refresh automatically. This is great if you want to tailor your resume for different roles.",
+    },
+    {
+      q: "What if I fail the aptitude test?",
+      a: "Different pipelines have different policies. Some allow retakes, others don't. Check the job posting for details. If you're struggling, use our mock test feature to practice and improve before taking the actual test.",
+    },
+    {
+      q: "Are the video interviews recorded?",
+      a: "That depends on the pipeline. Some interviews are live with a panel; others are recorded so panels can review them later. You'll see the interview format before you start, so there are no surprises.",
+    },
+    {
+      q: "How do I prepare for interviews?",
+      a: "Use our AI Mock Interview feature to practice. Record yourself answering common interview questions, and our AI will score you on appearance, language, confidence, delivery, and knowledge. Get feedback and tips to improve.",
+    },
+    {
+      q: "When will I hear back about my application?",
+      a: "You'll get automatic updates at each stage. If you don't hear back within the posted timeline, reach out to the recruiter or TPO directly. We send notifications via email, so keep your inbox checked.",
+    },
+  ],
+  "For Recruiters": [
+    {
+      q: "How do I set up a hiring pipeline?",
+      a: "Create a job posting with details like role, location, required skills, and salary. Then configure your pipeline: Round 1 (resume shortlisting), Round 2 (aptitude/technical test), Round 3 (interviews). You can customize scoring rubrics and auto-advance rules for each round.",
+    },
+    {
+      q: "How does candidate shortlisting work?",
+      a: "Our ATS scores candidates based on resume alignment with your job description. You can filter by score, skills, experience, and other criteria. The system suggests top matches, but you make the final shortlist decision.",
+    },
+    {
+      q: "Can I create custom aptitude tests?",
+      a: "Yes. You can build custom tests from scratch, upload your own questions, or use pre-built templates from our library. Set time limits, question types, and passing scores. The system auto-grades MCQs instantly.",
+    },
+    {
+      q: "What video interview features do you offer?",
+      a: "You can collect recorded responses to standard questions or run live interviews with panels. Our AI generates summaries of video responses (appearance, language clarity, confidence) so your panel can focus on fit instead of note-taking.",
+    },
+    {
+      q: "How do I move candidates between stages?",
+      a: "Use bulk operations to move candidates, or drag-and-drop them in your pipeline view. Set rules to auto-advance candidates who meet thresholds (e.g., score >= 70). Notifications are sent automatically.",
+    },
+    {
+      q: "Can I send feedback to rejected candidates?",
+      a: "Yes. Create templated rejection messages or write custom feedback. Candidates receive notifications immediately, which improves your employer brand and reduces inbound complaints.",
+    },
+  ],
+  "Privacy & Security": [
+    {
+      q: "What data do you collect from me?",
+      a: "We collect only data necessary for hiring workflows: resume, basic profile info, test responses, and interview recordings. We don't collect unnecessary personal information and don't sell data to third parties.",
+    },
+    {
+      q: "How long do you keep my data?",
+      a: "Data retention depends on local regulations and your organization's policy. Typically, candidate data is retained for 1-3 years post-hire or post-rejection. You can request deletion anytime.",
+    },
+    {
+      q: "Is the platform GDPR and data privacy compliant?",
+      a: "Yes. We follow GDPR, data localization requirements, and other privacy regulations. We use encryption, secure servers, and minimal data practices. Contact us for detailed compliance documentation.",
+    },
+    {
+      q: "Who has access to my resume and videos?",
+      a: "Only the recruiting team and authorized panelists have access. Candidates can see their own data. Recruiters can't share your data outside the hiring process without permission.",
+    },
+  ],
+  "Technical Support": [
+    {
+      q: "My camera/microphone isn't working during the test.",
+      a: "Check your browser permissions (Chrome address bar > camera icon). Allow camera and microphone access. Refresh the page if needed. If still stuck, use the 'Report Issue' button in the test to contact support immediately.",
+    },
+    {
+      q: "I got disconnected during a test. What happens to my progress?",
+      a: "We auto-save your answers regularly. If your internet drops, rejoin using the same test link within 15 minutes and continue from where you left off. If the test timer ran out, you may need to contact the recruiter.",
+    },
+    {
+      q: "What browsers and devices are supported?",
+      a: "We support Chrome, Firefox, Safari, and Edge on desktop/laptop. For tests requiring video, desktop/laptop is strongly recommended. Mobile is supported for viewing applications and status only.",
+    },
+    {
+      q: "How do I contact support if I'm stuck?",
+      a: "Use the 'Help' link in the left sidebar or the chat widget (bottom right). For urgent issues during tests, use the 'Report Issue' button. Our support team responds within a few hours.",
+    },
+  ],
+};
 
 export default function FAQ() {
-  const [open, setOpen] = useState(0);
+  const [activeCategory, setActiveCategory] = useState("Getting Started");
+  const [expandedIndex, setExpandedIndex] = useState(null);
+
+  const currentFAQs = faqCategories[activeCategory] || [];
 
   return (
-    <div style={{ width: "100%" }}>
-      {/* Header card */}
-      <section className="card" style={{ padding: 28, marginBottom: 20 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>FAQ</h1>
-        <p style={{ color: "var(--muted)", maxWidth: 980 }}>
-          Answers to common questions about Recruiver’s ATS, rounds, sign-in, and privacy.
-          If you don’t find what you’re looking for, contact your TPO or the recruiter.
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <section>
+        <h1 className="text-5xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h1>
+        <p className="text-2xl text-gray-600 max-w-3xl">
+          Can't find what you're looking for? Check the categories below or reach out to our support team.
         </p>
       </section>
 
-      {/* Accordion */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {faqItems.map((item, i) => {
-          const isOpen = open === i;
+      {/* Category Tabs */}
+      <div className="flex flex-wrap gap-3">
+        {Object.keys(faqCategories).map((category) => (
+          <button
+            key={category}
+            onClick={() => {
+              setActiveCategory(category);
+              setExpandedIndex(null);
+            }}
+            className={`px-6 py-3 rounded-lg font-bold text-base transition-all ${
+              activeCategory === category
+                ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg"
+                : "bg-white border-2 border-gray-300 text-gray-900 hover:border-indigo-400"
+            }`}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+
+      {/* FAQ Items */}
+      <div className="space-y-4">
+        {currentFAQs.map((item, i) => {
+          const isExpanded = expandedIndex === i;
           return (
-            <div key={i} className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div
+              key={i}
+              className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
+            >
               <button
-                onClick={() => setOpen(isOpen ? -1 : i)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "18px 20px",
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
+                onClick={() => setExpandedIndex(isExpanded ? null : i)}
+                className="w-full text-left px-8 py-6 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors"
               >
-                <span>{item.q}</span>
-                <span
-                  aria-hidden
-                  style={{
-                    transform: `rotate(${isOpen ? 180 : 0}deg)`,
-                    transition: "transform .2s ease",
-                    opacity: 0.8,
-                  }}
+                <h3 className="text-lg font-bold text-gray-900 flex-1">{item.q}</h3>
+                <div
+                  className={`flex-shrink-0 text-2xl text-indigo-600 transition-transform ${
+                    isExpanded ? "rotate-180" : ""
+                  }`}
                 >
                   ▼
-                </span>
+                </div>
               </button>
 
-              <div
-                style={{
-                  borderTop: "1px solid rgba(255,255,255,0.06)",
-                  display: isOpen ? "block" : "none",
-                }}
-              >
-                <div style={{ padding: "14px 20px", color: "var(--muted)" }}>{item.a}</div>
-              </div>
+              {isExpanded && (
+                <div className="border-t border-gray-200 bg-gray-50 px-8 py-6">
+                  <p className="text-lg text-gray-700 leading-relaxed">{item.a}</p>
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+
+      {/* Still Need Help */}
+      <section className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-12">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Still Have Questions?</h2>
+          <p className="text-xl text-gray-700 mb-8 max-w-2xl mx-auto">
+            Our support team is here to help. Reach out via chat, email, or contact your recruiter or TPO directly.
+          </p>
+          <div className="flex flex-wrap gap-4 justify-center">
+            <button className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all">
+              💬 Start Chat
+            </button>
+            <button className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 font-bold rounded-lg hover:bg-indigo-50 transition-all">
+              📧 Email Support
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );
 }
 
-/** Attach Layout so the top header/nav appears just like the dashboard. */
 FAQ.getLayout = (page) => <Layout active="faq">{page}</Layout>;

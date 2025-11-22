@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 
 export default function ResumeView() {
-  const [fileMeta, setFileMeta] = useState(null); // { name }
+  const [fileMeta, setFileMeta] = useState(null);
   const [resumeText, setResumeText] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -28,9 +29,11 @@ export default function ResumeView() {
 
   const handleUpload = async (file) => {
     if (!file) return;
-    const text = await file.text();
-    const meta = { name: file.name };
+    setUploading(true);
     try {
+      const text = await file.text();
+      const meta = { name: file.name, size: file.size };
+
       if (/\.pdf$/i.test(file.name)) {
         const dataUrl = await fileToDataURL(file);
         localStorage.setItem("recruiver.resume.dataUrl", dataUrl);
@@ -41,100 +44,138 @@ export default function ResumeView() {
         localStorage.removeItem("recruiver.resume.mime");
         setPdfUrl("");
       }
+
       localStorage.setItem("recruiver.resume.file", JSON.stringify(meta));
       localStorage.setItem("recruiver.resume.text", text);
-    } catch {}
-    setFileMeta(meta);
-    setResumeText(text);
+      setFileMeta(meta);
+      setResumeText(text);
+      setEditing(false);
+    } catch (err) {
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const onDelete = () => {
-    try {
-      localStorage.removeItem("recruiver.resume.file");
-      localStorage.removeItem("recruiver.resume.text");
-      localStorage.removeItem("recruiver.resume.dataUrl");
-      localStorage.removeItem("recruiver.resume.mime");
-    } catch {}
-    setFileMeta(null);
-    setResumeText("");
-    setPdfUrl("");
-    setEditing(false);
-  };
-
-  const onSave = () => {
-    setEditing(false);
+    if (window.confirm("Are you sure you want to delete this resume? This action cannot be undone.")) {
+      try {
+        localStorage.removeItem("recruiver.resume.file");
+        localStorage.removeItem("recruiver.resume.text");
+        localStorage.removeItem("recruiver.resume.dataUrl");
+        localStorage.removeItem("recruiver.resume.mime");
+      } catch {}
+      setFileMeta(null);
+      setResumeText("");
+      setPdfUrl("");
+      setEditing(false);
+    }
   };
 
   const hasResume = !!(resumeText || pdfUrl);
-
   const isPdf = fileMeta?.name && /\.pdf$/i.test(fileMeta.name);
+  const fileSize = fileMeta?.size ? `${(fileMeta.size / 1024).toFixed(1)} KB` : "";
 
   return (
-    <div className="space-y-6">
-      <div className="card">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Saved Resume</h1>
-            <div className="text-sm opacity-75">{fileMeta?.name || "No file saved"}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasResume && (
-              <button className="btn outline" onClick={() => setEditing((v) => !v)}>
-                {editing ? "Cancel" : "Edit"}
-              </button>
-            )}
-            {hasResume && (
-              <button className="btn ghost" onClick={onDelete}>
-                Delete
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900">My Resume</h1>
+        <p className="text-lg text-gray-600 mt-3">
+          {hasResume
+            ? "Manage your saved resume. Upload a new version anytime to update your profile."
+            : "Upload your resume to get started. We'll parse it for ATS scoring and matching."}
+        </p>
       </div>
 
-      {!hasResume && (
-        <div className="card">
-          <h3 className="font-semibold mb-2">No resume found</h3>
-          <p className="text-sm opacity-80 mb-3">Upload a resume to save and preview it here.</p>
-          <div
-            className="flex items-center justify-center border-2 border-dashed rounded-xl p-6 hover:bg-black/5 transition cursor-pointer"
-            onClick={() => uploadRef.current?.click()}
-            role="button"
-            aria-label="Upload resume"
-          >
-            Click to upload (.pdf, .doc, .docx, .txt)
-          </div>
-          <input
-            ref={uploadRef}
-            type="file"
-            accept=".pdf,.doc,.docx,.txt"
-            className="hidden"
-            onChange={(e) => handleUpload(e.target.files?.[0])}
-          />
-          <div className="mt-4">
-            <button
-              className={`btn primary ${!fileMeta ? "opacity-60 cursor-not-allowed" : ""}`}
-              onClick={onSave}
-              disabled={!fileMeta}
+      {!hasResume ? (
+        /* Empty State */
+        <div className="bg-white rounded-xl border border-gray-200 p-12">
+          <div className="text-center">
+            <div className="text-7xl mb-6">📄</div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">No Resume Yet</h2>
+            <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+              Upload your resume to unlock ATS scoring, job matching, and AI-powered improvements. Your resume helps us find the best opportunities for you.
+            </p>
+
+            {/* Upload Area */}
+            <div
+              className="border-2 border-dashed border-indigo-300 rounded-xl p-12 hover:border-indigo-400 hover:bg-indigo-50 transition-all cursor-pointer mb-8"
+              onClick={() => uploadRef.current?.click()}
+              role="button"
+              aria-label="Upload resume"
             >
-              Save
-            </button>
+              <div className="text-5xl mb-4">⬆️</div>
+              <div className="text-2xl font-bold text-gray-900 mb-2">Drop your resume here</div>
+              <div className="text-base text-gray-600">or click to browse</div>
+              <div className="text-sm text-gray-500 mt-3">PDF, DOC, DOCX, or TXT (Max 10 MB)</div>
+            </div>
+
+            <input
+              ref={uploadRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={(e) => handleUpload(e.target.files?.[0])}
+            />
           </div>
         </div>
-      )}
-
-      {hasResume && (
+      ) : (
+        /* Resume Saved State */
         <>
+          {/* File Info Card */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-8">
+            <div className="flex items-start justify-between gap-6">
+              <div className="flex-1">
+                <div className="text-sm font-bold text-emerald-600 uppercase tracking-wide mb-2">
+                  ✓ Resume Saved
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">{fileMeta?.name}</h2>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span>📊 {fileSize}</span>
+                  <span>•</span>
+                  <span>
+                    {isPdf ? "📑 PDF" : "📝 Text Document"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditing(!editing)}
+                  className="px-6 py-2.5 rounded-lg font-bold text-sm border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-all"
+                >
+                  {editing ? "✕ Cancel" : "✏️ Replace"}
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="px-6 py-2.5 rounded-lg font-bold text-sm border-2 border-red-300 text-red-600 hover:bg-red-50 transition-all"
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Replace Upload Section */}
           {editing && (
-            <div className="card">
-              <h3 className="font-semibold mb-2">Replace Resume</h3>
+            <div className="bg-white rounded-xl border border-gray-200 p-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-6">Replace Your Resume</h3>
               <div
-                className="flex items-center justify-center border-2 border-dashed rounded-xl p-6 hover:bg-black/5 transition cursor-pointer"
-                onClick={() => uploadRef.current?.click()}
+                className="border-2 border-dashed border-indigo-300 rounded-xl p-12 hover:border-indigo-400 hover:bg-indigo-50 transition-all cursor-pointer"
+                onClick={() => !uploading && uploadRef.current?.click()}
                 role="button"
                 aria-label="Upload resume replacement"
               >
-                Click to upload a new file (.pdf, .doc, .docx, .txt)
+                <div className="text-center">
+                  <div className="text-5xl mb-4">{uploading ? "⏳" : "⬆️"}</div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {uploading ? "Uploading..." : "Click to upload new file"}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-2">
+                    PDF, DOC, DOCX, or TXT
+                  </div>
+                </div>
               </div>
               <input
                 ref={uploadRef}
@@ -142,24 +183,79 @@ export default function ResumeView() {
                 accept=".pdf,.doc,.docx,.txt"
                 className="hidden"
                 onChange={(e) => handleUpload(e.target.files?.[0])}
+                disabled={uploading}
               />
-              <div className="mt-4">
-                <button className="btn primary" onClick={onSave}>
-                  Save
-                </button>
-              </div>
             </div>
           )}
 
-          <div className="card">
-            <h3 className="font-semibold text-lg mb-2">Preview</h3>
+          {/* Preview Section */}
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Preview</h3>
+
             {isPdf && pdfUrl ? (
-              <object data={pdfUrl} type="application/pdf" className="w-full h-[700px] rounded-lg">
-                <p className="text-sm">PDF preview unavailable. Download and open manually.</p>
-              </object>
+              <div className="bg-gray-900 rounded-lg overflow-hidden">
+                <object
+                  data={pdfUrl}
+                  type="application/pdf"
+                  className="w-full"
+                  style={{ height: "800px" }}
+                >
+                  <div className="flex items-center justify-center h-96 bg-gray-900">
+                    <div className="text-center">
+                      <div className="text-4xl mb-4">📄</div>
+                      <p className="text-gray-300 mb-4">PDF preview unavailable</p>
+                      <p className="text-sm text-gray-400">Download and open in your PDF reader</p>
+                    </div>
+                  </div>
+                </object>
+              </div>
+            ) : resumeText ? (
+              <div className="bg-gray-50 rounded-lg p-8 max-h-96 overflow-y-auto border border-gray-200">
+                <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed">
+                  {resumeText}
+                </pre>
+              </div>
             ) : (
-              <pre className="text-sm whitespace-pre-wrap opacity-90">{resumeText}</pre>
+              <div className="text-center py-12">
+                <div className="text-5xl mb-4">👀</div>
+                <p className="text-gray-600">Preview not available</p>
+              </div>
             )}
+          </div>
+
+          {/* Tips Section */}
+          <div className="bg-blue-50 rounded-xl border border-blue-200 p-8">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">💡 Resume Tips</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex gap-4">
+                <span className="text-2xl flex-shrink-0">📝</span>
+                <div>
+                  <div className="font-bold text-gray-900">Keep It Current</div>
+                  <p className="text-sm text-gray-700 mt-1">Update your resume regularly with recent experiences and skills</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <span className="text-2xl flex-shrink-0">🎯</span>
+                <div>
+                  <div className="font-bold text-gray-900">Use Keywords</div>
+                  <p className="text-sm text-gray-700 mt-1">Include skills and keywords from job descriptions to improve ATS matching</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <span className="text-2xl flex-shrink-0">✨</span>
+                <div>
+                  <div className="font-bold text-gray-900">Highlight Achievements</div>
+                  <p className="text-sm text-gray-700 mt-1">Use numbers and quantifiable results to show impact</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <span className="text-2xl flex-shrink-0">📐</span>
+                <div>
+                  <div className="font-bold text-gray-900">Format Clearly</div>
+                  <p className="text-sm text-gray-700 mt-1">Use consistent formatting, clear sections, and readable fonts</p>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}

@@ -8,9 +8,9 @@ export default function ResumeATS() {
   const router = useRouter();
 
   // UI state (labels)
-  const [savedFile, setSavedFile] = useState(null);      // { name }
-  const [lastSource, setLastSource] = useState(null);    // "A" | "B"
-  const [jdFileMeta, setJdFileMeta] = useState(null);    // { name }
+  const [savedFile, setSavedFile] = useState(null);
+  const [lastSource, setLastSource] = useState(null);
+  const [jdFileMeta, setJdFileMeta] = useState(null);
 
   // Actual File objects (for backend)
   const [resumeFile, setResumeFile] = useState(null);
@@ -181,9 +181,6 @@ export default function ResumeATS() {
     }
   };
 
-  const dropStyles =
-    "flex items-center justify-center border-2 border-dashed rounded-xl p-6 hover:bg-black/5 transition cursor-pointer text-sm";
-
   const canGeneral = !!resumeFile && !loadingGeneral;
   const canMatch = !!resumeFile && !!jdFile && !loadingMatch;
 
@@ -193,41 +190,54 @@ export default function ResumeATS() {
   };
 
   const jdLabel =
-    jdFileMeta?.name || "Drop or click to upload the job description (JD)";
+    jdFileMeta?.name || "Drop or click to upload the job description";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
       {/* Header */}
-      <div className="card">
-        <h1 className="text-2xl font-semibold">Resume ATS (AI)</h1>
-        <p className="text-sm opacity-80 mt-1">
-          Run a quick ATS-style check or compare your resume against a
-          company’s JD. This is a frontend demo wired to a custom ATS scoring
-          service.
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900">Resume ATS Analysis</h1>
+        <p className="text-lg text-gray-600 mt-3">
+          Optimize your resume with AI-powered ATS scoring. Analyze general compatibility or match against specific job descriptions.
         </p>
       </div>
 
-      {/* Two-column cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card A – General */}
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-3">Resume ATS (General)</h2>
+      {/* Main Content - Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* LEFT CARD – General ATS */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">General ATS Score</h2>
+              <p className="text-base text-gray-600 mt-2">
+                Get an overall ATS compatibility score for your resume
+              </p>
+            </div>
+            <div className="text-4xl">📄</div>
+          </div>
+
+          {/* Upload Area */}
           <div
-            className={dropStyles}
+            className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer mb-6 text-center"
             onClick={() => resumeInputA.current?.click()}
             role="button"
             aria-label="Upload resume for general ATS"
           >
-            <div className="text-center">
-              <div className="font-medium">{labelFor("A")}</div>
-              <div className="text-xs opacity-70 mt-1">
-                Accepted: .pdf, .doc, .docx, .txt
-              </div>
-              <div className="text-[11px] opacity-60 mt-1">
-                If this file name came from a previous visit, please re-upload
-                before running ATS.
-              </div>
+            <div className="text-5xl mb-4">📤</div>
+            <div className="text-lg font-bold text-gray-900">
+              {lastSource === "A" && savedFile?.name ? savedFile.name : "Upload Your Resume"}
             </div>
+            <div className="text-sm text-gray-600 mt-3">
+              Drag and drop or click to browse
+            </div>
+            <div className="text-xs text-gray-500 mt-4">
+              Accepted formats: PDF, DOC, DOCX, TXT
+            </div>
+            {lastSource === "A" && savedFile?.name && (
+              <div className="text-xs text-indigo-600 font-medium mt-3 flex items-center justify-center gap-2">
+                ✓ File loaded
+              </div>
+            )}
           </div>
           <input
             ref={resumeInputA}
@@ -237,98 +247,165 @@ export default function ResumeATS() {
             onChange={(e) => handleResumeUpload(e.target.files?.[0], "A")}
           />
 
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              className={`btn primary ${
-                !canGeneral ? "opacity-60 cursor-not-allowed" : ""
-              }`}
-              onClick={onGenerateGeneral}
-              disabled={!canGeneral}
-            >
-              {loadingGeneral ? "Generating ATS…" : "Generate ATS"}
-            </button>
-            <span className="text-xs opacity-70">Requires a resume</span>
-          </div>
+          {/* Button */}
+          <button
+            className={`w-full px-6 py-3 rounded-lg font-bold text-base transition-all ${
+              canGeneral
+                ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:shadow-lg active:scale-95"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={onGenerateGeneral}
+            disabled={!canGeneral}
+          >
+            {loadingGeneral ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin">⏳</span>
+                Analyzing Resume…
+              </span>
+            ) : (
+              "Generate ATS Score"
+            )}
+          </button>
+
+          <p className="text-sm text-gray-500 text-center mt-4">
+            {canGeneral ? (
+              <span className="text-green-600 font-medium">✓ Ready to generate</span>
+            ) : (
+              "Upload a resume to get started"
+            )}
+          </p>
         </div>
 
-        {/* Card B – Compare with JD */}
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-3">
-            Compare ATS with JD (Company)
-          </h2>
-
-          {/* Resume upload for JD match */}
-          <div
-            className={dropStyles}
-            onClick={() => resumeInputB.current?.click()}
-            role="button"
-            aria-label="Upload resume for JD match"
-          >
-            <div className="text-center">
-              <div className="font-medium">{labelFor("B")}</div>
-              <div className="text-xs opacity-70 mt-1">
-                Accepted: .pdf, .doc, .docx, .txt
-              </div>
-              <div className="text-[11px] opacity-60 mt-1">
-                The same resume is used for both General and Company ATS.
-              </div>
+        {/* RIGHT CARD – JD Match */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Match with Job Description</h2>
+              <p className="text-base text-gray-600 mt-2">
+                Compare your resume against a specific company JD
+              </p>
             </div>
+            <div className="text-4xl">🎯</div>
           </div>
-          <input
-            ref={resumeInputB}
-            type="file"
-            accept=".pdf,.doc,.docx,.txt"
-            className="hidden"
-            onChange={(e) => handleResumeUpload(e.target.files?.[0], "B")}
-          />
 
-          {/* JD upload */}
-          <div
-            className={`${dropStyles} mt-4`}
-            onClick={() => jdInput.current?.click()}
-            role="button"
-            aria-label="Upload job description file"
-          >
-            <div className="text-center">
-              <div className="font-medium">{jdLabel}</div>
-              <div className="text-xs opacity-70 mt-1">
-                Accepted: .pdf, .doc, .docx, .txt
-              </div>
-            </div>
-          </div>
-          <input
-            ref={jdInput}
-            type="file"
-            accept=".pdf,.doc,.docx,.txt"
-            className="hidden"
-            onChange={(e) => handleJDUpload(e.target.files?.[0])}
-          />
-
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              className={`btn primary ${
-                !canMatch ? "opacity-60 cursor-not-allowed" : ""
-              }`}
-              onClick={onGenerateMatch}
-              disabled={!canMatch}
+          {/* Resume Upload */}
+          <div className="mb-6">
+            <div className="text-sm font-semibold text-gray-900 mb-3">Your Resume</div>
+            <div
+              className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer text-center"
+              onClick={() => resumeInputB.current?.click()}
+              role="button"
+              aria-label="Upload resume for JD match"
             >
-              {loadingMatch ? "Generating ATS Match…" : "Generate ATS Match"}
-            </button>
-            <span className="text-xs opacity-70">
-              Requires resume &amp; JD
-            </span>
+              <div className="text-3xl mb-2">📄</div>
+              <div className="text-sm font-bold text-gray-900">
+                {lastSource === "B" && savedFile?.name ? savedFile.name : "Upload Resume"}
+              </div>
+              <div className="text-xs text-gray-500 mt-2">
+                Click to browse
+              </div>
+            </div>
+            <input
+              ref={resumeInputB}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={(e) => handleResumeUpload(e.target.files?.[0], "B")}
+            />
           </div>
+
+          {/* JD Upload */}
+          <div className="mb-6">
+            <div className="text-sm font-semibold text-gray-900 mb-3">Job Description</div>
+            <div
+              className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer text-center"
+              onClick={() => jdInput.current?.click()}
+              role="button"
+              aria-label="Upload job description file"
+            >
+              <div className="text-3xl mb-2">📋</div>
+              <div className="text-sm font-bold text-gray-900">
+                {jdFileMeta?.name ? jdFileMeta.name : "Upload JD"}
+              </div>
+              <div className="text-xs text-gray-500 mt-2">
+                Click to browse
+              </div>
+            </div>
+            <input
+              ref={jdInput}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={(e) => handleJDUpload(e.target.files?.[0])}
+            />
+          </div>
+
+          {/* Status Indicators */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+              lastSource === "B" && savedFile?.name
+                ? "bg-green-50 border border-green-200"
+                : "bg-gray-50 border border-gray-200"
+            }`}>
+              <span className="text-lg">{lastSource === "B" && savedFile?.name ? "✓" : "○"}</span>
+              <span className="text-xs font-medium text-gray-700">Resume</span>
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+              jdFileMeta?.name
+                ? "bg-green-50 border border-green-200"
+                : "bg-gray-50 border border-gray-200"
+            }`}>
+              <span className="text-lg">{jdFileMeta?.name ? "✓" : "○"}</span>
+              <span className="text-xs font-medium text-gray-700">JD File</span>
+            </div>
+          </div>
+
+          {/* Button */}
+          <button
+            className={`w-full px-6 py-3 rounded-lg font-bold text-base transition-all ${
+              canMatch
+                ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:shadow-lg active:scale-95"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+            onClick={onGenerateMatch}
+            disabled={!canMatch}
+          >
+            {loadingMatch ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin">⏳</span>
+                Comparing Resume…
+              </span>
+            ) : (
+              "Generate Match Score"
+            )}
+          </button>
+
+          <p className="text-sm text-gray-500 text-center mt-4">
+            {canMatch ? (
+              <span className="text-green-600 font-medium">✓ Ready to generate</span>
+            ) : (
+              "Upload both files to get started"
+            )}
+          </p>
         </div>
       </div>
 
-      {/* Footer strip */}
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <div className="opacity-70">
-          Tip: You can view or manage your saved resume anytime.
+      {/* Footer Section */}
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-8">
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">View Your Resume</h3>
+            <p className="text-base text-gray-600 mt-1">
+              Manage and preview your saved resume at any time
+            </p>
+          </div>
+          <Link 
+            href="/candidate/resume-view" 
+            className="px-6 py-3 bg-white border-2 border-indigo-200 text-indigo-600 font-bold rounded-lg hover:bg-indigo-50 transition-all whitespace-nowrap"
+          >
+            View Resume
+          </Link>
         </div>
-        <Link href="/candidate/resume-view" className="btn outline">
-          View Resume
-        </Link>
       </div>
     </div>
   );

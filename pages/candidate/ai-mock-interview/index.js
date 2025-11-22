@@ -1,4 +1,4 @@
-// pages/candidate/ai-mock-interview/index.js - FIXED
+// pages/candidate/ai-mock-interview/index.js
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 
@@ -54,181 +54,151 @@ export default function AIMockInterview() {
   const skills = summary?.skills || {};
 
   const handleTakeTest = () => {
-    // Redirect to live interview page
     window.location.href = "/candidate/ai-mock-interview/live";
   };
 
   if (loading) {
     return (
-      <div className="card" style={{ padding: 40, textAlign: "center" }}>
-        Loading your mock interview data...
+      <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <p className="text-lg text-gray-600 font-medium">Loading your mock interview data…</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header area */}
-      <div className="card" style={{ padding: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 14,
-            alignItems: "flex-start",
-          }}
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-gray-900">AI Mock Interviews</h1>
+          <p className="text-lg text-gray-600 mt-3">
+            Practice real interviews with AI. Get evaluated on appearance, language, confidence, delivery, and knowledge.
+          </p>
+        </div>
+        <button
+          onClick={handleTakeTest}
+          className="px-8 py-3 text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition-all whitespace-nowrap"
         >
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 800 }}>AI Mock Interview</h2>
-            <p style={{ color: "var(--muted)" }}>
-              Practice real interviews with AI — evaluate appearance, language,
-              confidence, content delivery, and knowledge.
-            </p>
-          </div>
+          🎤 Take a Test
+        </button>
+      </div>
 
-          <button className="btn primary" onClick={handleTakeTest}>
-            Take a Test
-          </button>
+      {/* Overall Score & How It Works */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Score Card */}
+        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-8">
+          <div className="text-sm font-bold text-indigo-600 uppercase tracking-wide mb-3">
+            Overall Score
+          </div>
+          <div className="text-6xl font-bold text-indigo-900">
+            {latest?.score ?? "--"}
+            <span className="text-2xl font-semibold text-indigo-600 ml-2">/ 100</span>
+          </div>
+          <p className="text-sm text-indigo-700 mt-4">
+            Based on your latest attempt
+          </p>
         </div>
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 18,
-          }}
-        >
-          {/* Left card: Overall score */}
-          <div
-            className="card"
-            style={{
-              padding: 20,
-              borderRadius: 14,
-            }}
-          >
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>
-              Overall Score
-            </div>
-            <div style={{ fontSize: 40, fontWeight: 900 }}>
-              {latest?.score ?? "--"}
-              <span style={{ fontSize: 16, opacity: 0.5 }}>/ 100</span>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-              Based on latest attempt
-            </div>
-          </div>
-
-          {/* Right card: How it works */}
-          <div className="card" style={{ padding: 20 }}>
-            <h4 style={{ fontWeight: 700 }}>How it works</h4>
-            <ul
-              style={{
-                fontSize: 13,
-                color: "var(--muted)",
-                marginTop: 8,
-                paddingLeft: 20,
-                display: "grid",
-                gap: 4,
-              }}
-            >
-              <li>AI evaluates your video responses.</li>
-              <li>Scores 5 soft skills using ML models.</li>
-              <li>Improves with more attempts.</li>
-            </ul>
-          </div>
+        {/* How It Works */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">🎯 How It Works</h3>
+          <ul className="space-y-3">
+            <li className="flex gap-3 text-base">
+              <span className="text-indigo-600 font-bold flex-shrink-0">1.</span>
+              <span className="text-gray-700">AI evaluates your video responses in real-time</span>
+            </li>
+            <li className="flex gap-3 text-base">
+              <span className="text-indigo-600 font-bold flex-shrink-0">2.</span>
+              <span className="text-gray-700">Scores 5 soft skills using ML models</span>
+            </li>
+            <li className="flex gap-3 text-base">
+              <span className="text-indigo-600 font-bold flex-shrink-0">3.</span>
+              <span className="text-gray-700">Improves with more attempts and practice</span>
+            </li>
+          </ul>
         </div>
       </div>
 
-      {/* Metrics Section */}
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontWeight: 800 }}>Skill Breakdown</h3>
-        <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>
-          Average across all attempts
+      {/* Skill Breakdown */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Skill Breakdown</h2>
+        <p className="text-base text-gray-600 mb-8">
+          Average scores across all your attempts
         </p>
-        <div style={{ display: "grid", gap: 14, marginTop: 12 }}>
-          {[
-            { key: "appearance", label: "Appearance" },
-            { key: "language", label: "Language" },
-            { key: "confidence", label: "Confidence" },
-            { key: "contentDelivery", label: "Content Delivery" },
-            { key: "knowledge", label: "Knowledge" },
-          ].map(({ key, label }) => (
-            <div key={key}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ opacity: 0.9 }}>{label}</span>
-                <span style={{ opacity: 0.7 }}>
-                  {skills[key] ?? 0} / 100
-                </span>
-              </div>
 
-              <div
-                style={{
-                  position: "relative",
-                  background: "rgba(255,255,255,0.08)",
-                  height: 6,
-                  borderRadius: 20,
-                  marginTop: 6,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${skills[key] || 0}%`,
-                    background:
-                      "linear-gradient(90deg, rgba(58,160,255,1), rgba(34,210,230,0.9))",
-                    height: "100%",
-                    borderRadius: 20,
-                  }}
-                />
+        <div className="space-y-6">
+          {[
+            { key: "appearance", label: "Appearance", icon: "👔" },
+            { key: "language", label: "Language", icon: "💬" },
+            { key: "confidence", label: "Confidence", icon: "💪" },
+            { key: "contentDelivery", label: "Content Delivery", icon: "📢" },
+            { key: "knowledge", label: "Knowledge", icon: "🧠" },
+          ].map(({ key, label, icon }) => {
+            const value = skills[key] ?? 0;
+            return (
+              <div key={key}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{icon}</span>
+                    <span className="text-lg font-semibold text-gray-900">{label}</span>
+                  </div>
+                  <span className="text-lg font-bold text-indigo-600">{value} / 100</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    style={{
+                      width: `${value}%`,
+                      background: "linear-gradient(90deg, #4f46e5, #06b6d4)",
+                      transition: "width 0.6s ease",
+                    }}
+                    className="h-full"
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Attempt history */}
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontWeight: 800 }}>Previous Attempts</h3>
+      {/* Previous Attempts */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Previous Attempts</h2>
 
         {attempts.length === 0 ? (
-          <div style={{ marginTop: 10, color: "var(--muted)" }}>
-            No attempts yet. Start your first mock interview!
+          <div className="text-center py-12">
+            <div className="text-5xl mb-4">🎬</div>
+            <p className="text-lg text-gray-600 font-medium">No attempts yet</p>
+            <p className="text-base text-gray-500 mt-2">Start your first mock interview to see results here</p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto", marginTop: 14 }}>
-            <table style={{ width: "100%", fontSize: 14 }}>
-              <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b-2 border-gray-200">
                 <tr>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Date</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Score</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Appearance</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Language</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Confidence</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Delivery</th>
-                  <th style={{ padding: "8px 12px", textAlign: "left" }}>Knowledge</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">Overall</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">👔 Appearance</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">💬 Language</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">💪 Confidence</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">📢 Delivery</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-900">🧠 Knowledge</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-200">
                 {attempts.map((a) => {
                   const d = a.takenAt ? new Date(a.takenAt) : null;
                   const details = a.details || {};
                   return (
-                    <tr key={a.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                      <td style={{ padding: "12px" }}>
+                    <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-4 text-sm text-gray-900 font-medium">
                         {d ? d.toLocaleDateString() : "--"}
                       </td>
-                      <td style={{ padding: "12px", fontWeight: 700 }}>{a.score}</td>
-                      <td style={{ padding: "12px" }}>{details.appearance ?? "--"}</td>
-                      <td style={{ padding: "12px" }}>{details.language ?? "--"}</td>
-                      <td style={{ padding: "12px" }}>{details.confidence ?? "--"}</td>
-                      <td style={{ padding: "12px" }}>{details.contentDelivery ?? "--"}</td>
-                      <td style={{ padding: "12px" }}>{details.knowledge ?? "--"}</td>
+                      <td className="px-4 py-4 text-lg font-bold text-indigo-600">{a.score}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700">{details.appearance ?? "--"}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700">{details.language ?? "--"}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700">{details.confidence ?? "--"}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700">{details.contentDelivery ?? "--"}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700">{details.knowledge ?? "--"}</td>
                     </tr>
                   );
                 })}

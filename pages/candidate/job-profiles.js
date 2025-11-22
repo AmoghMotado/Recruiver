@@ -19,14 +19,13 @@ function CandidateJobProfiles() {
       try {
         const [jobsRes, appsRes] = await Promise.all([
           fetch("/api/jobs?limit=100", {
-            credentials: "include", // ensure cookies are sent
+            credentials: "include",
           }),
           fetch("/api/jobs/applied", {
             credentials: "include",
           }),
         ]);
 
-        // If either endpoint says "not authenticated", redirect to login.
         if (jobsRes.status === 401 || appsRes.status === 401) {
           if (!cancelled) {
             alert("Not authenticated. Please log in again.");
@@ -37,7 +36,6 @@ function CandidateJobProfiles() {
           return;
         }
 
-        // Jobs
         const jobsData = await jobsRes.json().catch(() => ({}));
         if (!jobsRes.ok) {
           throw new Error(jobsData?.message || "Failed to load jobs");
@@ -46,7 +44,6 @@ function CandidateJobProfiles() {
           setJobs(jobsData.jobs || []);
         }
 
-        // Applications
         if (appsRes.status === 404) {
           if (!cancelled) setApps([]);
         } else {
@@ -130,161 +127,195 @@ function CandidateJobProfiles() {
 
   if (loading) {
     return (
-      <div className="card p-5">
-        <p className="text-sm text-slate-500">Loading…</p>
+      <div className="bg-white rounded-xl p-8 border border-gray-200">
+        <p className="text-lg text-gray-600 font-medium">Loading…</p>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-      {/* LEFT FILTERS / TABS */}
-      <aside className="card p-5 space-y-4">
-        <div>
-          <h1 className="text-base font-semibold text-slate-900">
-            Job Profiles
-          </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Browse open roles or track your applications.
-          </p>
-        </div>
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900">Job Opportunities</h1>
+        <p className="text-lg text-gray-600 mt-2">Browse open roles or track your applications</p>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            className={`btn text-xs ${
-              tab === "JOBS" ? "" : "ghost"
-            } w-full justify-center`}
-            onClick={() => setTab("JOBS")}
-          >
-            Browse Jobs
-          </button>
-          <button
-            className={`btn text-xs ${
-              tab === "APPS" ? "" : "ghost"
-            } w-full justify-center`}
-            onClick={() => setTab("APPS")}
-          >
-            My Applications
-          </button>
-        </div>
-
-        {tab === "JOBS" && (
-          <div className="pt-3 border-t border-slate-200 space-y-3">
-            <div>
-              <div className="text-[11px] font-medium text-slate-500 mb-1">
-                Search
-              </div>
-              <input
-                placeholder="Role, company, stack"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                placeholder="Location"
-                value={loc}
-                onChange={(e) => setLoc(e.target.value)}
-                style={inputStyle}
-              />
-              <input
-                placeholder="Experience"
-                value={exp}
-                onChange={(e) => setExp(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* RIGHT CONTENT */}
-      <main className="flex flex-col gap-4">
-        {tab === "JOBS" ? (
-          <>
-            <h2 className="text-lg font-semibold text-slate-900">
-              Open Roles
-            </h2>
-            {filteredJobs.length === 0 && (
-              <div className="card p-4 text-sm text-slate-500">
-                No jobs match your filters.
-              </div>
-            )}
-            <div className="grid gap-4 md:grid-cols-2">
-              {filteredJobs.map((j) => (
-                <JobCard
-                  key={j.id}
-                  job={j}
-                  applied={appliedJobIds.has(j.id)}
-                  onApply={() => apply(j.id)}
-                />
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="text-lg font-semibold text-slate-900">
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        {/* LEFT SIDEBAR - FILTERS */}
+        <aside className="bg-white rounded-xl border border-gray-200 p-8 h-fit">
+          {/* Tabs */}
+          <div className="flex gap-2 mb-8">
+            <button
+              onClick={() => setTab("JOBS")}
+              className={`flex-1 px-4 py-3 rounded-lg font-semibold text-sm transition-all ${
+                tab === "JOBS"
+                  ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Browse Jobs
+            </button>
+            <button
+              onClick={() => setTab("APPS")}
+              className={`flex-1 px-4 py-3 rounded-lg font-semibold text-sm transition-all ${
+                tab === "APPS"
+                  ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
               My Applications
-            </h2>
-            {apps.length === 0 && (
-              <div className="card p-4 text-sm text-slate-500">
-                You haven&apos;t applied to any jobs yet.
+            </button>
+          </div>
+
+          {/* Filters (only on JOBS tab) */}
+          {tab === "JOBS" && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Search
+                </label>
+                <input
+                  placeholder="Role, company, stack…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 font-medium text-sm focus:border-indigo-400 focus:outline-none transition"
+                />
               </div>
-            )}
-            <div className="grid gap-3">
-              {apps.map((a) => (
-                <ApplicationRow key={a.id} app={a} />
-              ))}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Location
+                </label>
+                <input
+                  placeholder="e.g., Remote, Bangalore…"
+                  value={loc}
+                  onChange={(e) => setLoc(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 font-medium text-sm focus:border-indigo-400 focus:outline-none transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Experience Level
+                </label>
+                <input
+                  placeholder="e.g., Junior, Senior…"
+                  value={exp}
+                  onChange={(e) => setExp(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 font-medium text-sm focus:border-indigo-400 focus:outline-none transition"
+                />
+              </div>
+
+              {/* Results count */}
+              <div className="pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600 font-medium">
+                  {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""} found
+                </p>
+              </div>
             </div>
-          </>
-        )}
-      </main>
+          )}
+        </aside>
+
+        {/* RIGHT CONTENT */}
+        <main className="space-y-6">
+          {tab === "JOBS" ? (
+            <>
+              {filteredJobs.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                  <div className="text-5xl mb-4">🔍</div>
+                  <p className="text-lg text-gray-600 font-medium">No jobs match your filters</p>
+                  <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredJobs.map((j) => (
+                    <JobCard
+                      key={j.id}
+                      job={j}
+                      applied={appliedJobIds.has(j.id)}
+                      onApply={() => apply(j.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {apps.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                  <div className="text-5xl mb-4">📋</div>
+                  <p className="text-lg text-gray-600 font-medium">No applications yet</p>
+                  <p className="text-sm text-gray-500 mt-2">Start exploring and apply to jobs</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {apps.map((a) => (
+                    <ApplicationRow key={a.id} app={a} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
 
-const inputStyle = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 10,
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  color: "#111827",
-  fontSize: 13,
-};
-
 function JobCard({ job, applied, onApply }) {
   return (
-    <div className="card p-4">
-      <div className="flex justify-between gap-4">
-        <div className="space-y-2">
-          <div className="text-sm font-semibold text-slate-900">
-            {job.title} — {job.company}
+    <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-indigo-200 transition-all">
+      <div className="flex items-start justify-between gap-6">
+        <div className="flex-1 min-w-0">
+          {/* Job Title & Company */}
+          <div className="mb-1">
+            <h3 className="text-xl font-bold text-gray-900">
+              {job.title}
+            </h3>
+            <p className="text-lg text-gray-600 font-semibold mt-1">
+              {job.company}
+            </p>
           </div>
-          <div className="text-xs text-slate-500">{job.stack}</div>
-          <div className="flex flex-wrap gap-2 mt-1 text-xs">
-            {job.location && <span className="pill">{job.location}</span>}
-            {job.salaryRange && <span className="pill">{job.salaryRange}</span>}
-            {job.experience && <span className="pill">{job.experience}</span>}
-            <span className="pill">
-              Posted:{" "}
-              {job.createdAt
-                ? new Date(job.createdAt).toLocaleDateString()
-                : "—"}
-            </span>
+
+          {/* Tech Stack */}
+          {job.stack && (
+            <p className="text-sm text-gray-600 mt-3 mb-4">
+              {job.stack}
+            </p>
+          )}
+
+          {/* Tags */}
+          <div className="flex flex-wrap gap-2">
+            {job.location && (
+              <Badge icon="📍">{job.location}</Badge>
+            )}
+            {job.experience && (
+              <Badge icon="📊">{job.experience}</Badge>
+            )}
+            {job.salaryRange && (
+              <Badge icon="💰">{job.salaryRange}</Badge>
+            )}
+            {job.createdAt && (
+              <Badge icon="📅">
+                Posted {new Date(job.createdAt).toLocaleDateString()}
+              </Badge>
+            )}
           </div>
         </div>
-        <div className="flex items-center">
-          <button
-            className={`btn text-xs ${applied ? "ghost" : ""}`}
-            onClick={onApply}
-            disabled={applied}
-          >
-            {applied ? "Applied" : "Apply"}
-          </button>
-        </div>
+
+        {/* Apply Button */}
+        <button
+          onClick={onApply}
+          disabled={applied}
+          className={`px-6 py-3 rounded-lg font-bold text-sm whitespace-nowrap transition-all ${
+            applied
+              ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+              : "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:shadow-lg active:scale-95"
+          }`}
+        >
+          {applied ? "✓ Applied" : "Apply Now"}
+        </button>
       </div>
     </div>
   );
@@ -293,48 +324,73 @@ function JobCard({ job, applied, onApply }) {
 function ApplicationRow({ app }) {
   const job = app.job || {};
   const stageText = (s) => {
-    if (s === 1) return "R1 · Resume / ATS";
-    if (s === 2) return "R2 · Aptitude";
-    if (s === 3) return "R3 · Interview";
+    if (s === 1) return "Resume / ATS Review";
+    if (s === 2) return "Aptitude Test";
+    if (s === 3) return "Interview";
     return `Stage ${s}`;
   };
 
-  return (
-    <div className="card p-4 flex justify-between items-stretch gap-4">
-      {/* LEFT: job info */}
-      <div className="flex-1">
-        <div className="text-sm font-semibold text-slate-900">
-          {job.title} — {job.company}
-        </div>
-        <div className="mt-1 text-xs text-slate-500">
-          {job.location} · {job.experience} · {job.salaryRange}
-        </div>
-        <div className="flex flex-wrap gap-2 mt-2 text-[11px]">
-          {job.stack && <span className="pill">{job.stack}</span>}
-          <span className="pill">
-            Applied on{" "}
-            {app.createdAt
-              ? new Date(app.createdAt).toLocaleDateString()
-              : "—"}
-          </span>
-        </div>
-      </div>
+  const stageIcon = (s) => {
+    if (s === 1) return "📄";
+    if (s === 2) return "✍️";
+    if (s === 3) return "🎤";
+    return "📌";
+  };
 
-      {/* RIGHT: stage + status */}
-      <div className="min-w-[180px] pl-4 border-l border-slate-200 flex flex-col justify-center text-right gap-1">
-        <div className="text-[11px] text-slate-500 uppercase tracking-wide">
-          Current Stage
-        </div>
-        <div className="text-sm font-semibold text-slate-900">
-          {stageText(app.stage)}
-        </div>
-        {app.id && (
-          <div className="text-[11px] text-slate-400">
-            Application ID: {String(app.id).slice(0, 8)}…
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-indigo-200 transition-all">
+      <div className="flex items-start justify-between gap-6">
+        {/* LEFT: Job Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-xl font-bold text-gray-900">
+            {job.title}
+          </h3>
+          <p className="text-lg text-gray-600 font-semibold mt-1">
+            {job.company}
+          </p>
+
+          {/* Job Details */}
+          <div className="flex flex-wrap gap-2 mt-4 mb-4">
+            {job.location && <Badge icon="📍">{job.location}</Badge>}
+            {job.experience && <Badge icon="📊">{job.experience}</Badge>}
+            {job.salaryRange && <Badge icon="💰">{job.salaryRange}</Badge>}
+            {job.stack && <Badge icon="⚙️">{job.stack}</Badge>}
+            {app.createdAt && (
+              <Badge icon="📅">
+                Applied {new Date(app.createdAt).toLocaleDateString()}
+              </Badge>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* RIGHT: Current Stage */}
+        <div className="flex flex-col items-end gap-3 min-w-max">
+          <div className="text-center">
+            <div className="text-3xl mb-2">{stageIcon(app.stage)}</div>
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+              Current Stage
+            </div>
+            <div className="text-base font-bold text-gray-900 mt-2">
+              {stageText(app.stage)}
+            </div>
+          </div>
+          {app.id && (
+            <div className="text-xs text-gray-400 pt-2 border-t border-gray-200 w-full">
+              ID: {String(app.id).slice(0, 8)}…
+            </div>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function Badge({ icon, children }) {
+  return (
+    <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-full text-sm font-semibold text-indigo-700">
+      {icon}
+      {children}
+    </span>
   );
 }
 

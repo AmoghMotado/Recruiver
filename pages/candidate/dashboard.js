@@ -1,13 +1,13 @@
 // pages/candidate/dashboard.js
 import { useEffect, useState } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
+import Layout from "@/components/Layout";
 
 function Skeleton({ height = 120 }) {
   return (
     <div
       className="card"
       style={{
-        padding: 16,
+        padding: 20,
         height,
         background:
           "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 37%, rgba(255,255,255,0.03) 63%)",
@@ -80,158 +80,173 @@ function CandidateDashboard() {
   const mockAttempts = mockSummary?.totalAttempts || 0;
 
   return (
-    <div className="space-y-6">
-      {/* Top stats row */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="space-y-8 pb-8">
+      {/* Top KPI Row - 4 Columns */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Resume ATS */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-gray-500">
-            Resume ATS
+        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
+            Resume ATS Score
           </div>
-          <div className="mt-3 flex items-end justify-between">
-            <div className="text-2xl font-semibold">
-              {loading ? (
-                <span className="text-gray-400">--</span>
-              ) : (
-                <>
-                  {atsScore}
-                  <span className="text-sm opacity-60">%</span>
-                </>
-              )}
+          <div className="mt-2 flex items-end justify-between">
+            <div className="flex flex-col">
+              <div className="text-5xl font-bold text-gray-900">
+                {loading ? (
+                  <span className="text-gray-300">--</span>
+                ) : (
+                  <>
+                    {atsScore}
+                    <span className="text-2xl opacity-70 font-semibold">%</span>
+                  </>
+                )}
+              </div>
+              <p className="mt-3 text-sm text-gray-600 font-medium">
+                Optimise for better matches
+              </p>
             </div>
-            <a
-              href="/candidate/resume-ats"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View details
-            </a>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Optimise your resume for better matches.
-          </p>
+          <a
+            href="/candidate/resume-ats"
+            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
+          >
+            View Analysis →
+          </a>
         </div>
 
         {/* Applications */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-gray-500">
+        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
             Applications
           </div>
-          <div className="mt-3 flex items-end justify-between">
-            <div className="text-2xl font-semibold">
-              {loading ? (
-                <span className="text-gray-400">--</span>
-              ) : (
-                applicationsCount
-              )}
+          <div className="mt-2 flex items-end justify-between">
+            <div className="flex flex-col">
+              <div className="text-5xl font-bold text-gray-900">
+                {loading ? (
+                  <span className="text-gray-300">--</span>
+                ) : (
+                  applicationsCount
+                )}
+              </div>
+              <p className="mt-3 text-sm text-gray-600 font-medium">
+                Jobs applied so far
+              </p>
             </div>
-            <a
-              href="/candidate/job-profiles"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View all
-            </a>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Jobs you&apos;ve applied to so far.
-          </p>
+          <a
+            href="/candidate/job-profiles"
+            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
+          >
+            View All →
+          </a>
         </div>
 
         {/* Recommended Jobs */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-gray-500">
+        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
             Recommended Jobs
           </div>
-          <div className="mt-3 flex items-end justify-between">
-            <div className="text-2xl font-semibold">
-              {loading ? (
-                <span className="text-gray-400">--</span>
-              ) : (
-                recommendedJobs.length
-              )}
+          <div className="mt-2 flex items-end justify-between">
+            <div className="flex flex-col">
+              <div className="text-5xl font-bold text-gray-900">
+                {loading ? (
+                  <span className="text-gray-300">--</span>
+                ) : (
+                  recommendedJobs.length
+                )}
+              </div>
+              <p className="mt-3 text-sm text-gray-600 font-medium">
+                Matching your profile
+              </p>
             </div>
-            <a
-              href="/candidate/job-profiles"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View all jobs
-            </a>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Based on your profile and skills.
-          </p>
+          <a
+            href="/candidate/job-profiles"
+            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
+          >
+            Browse Jobs →
+          </a>
         </div>
 
         {/* Mock Interviews */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-gray-500">
+        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
             Mock Interviews
           </div>
-          <div className="mt-3 flex items-end justify-between">
-            <div className="text-2xl font-semibold">
-              {loading ? (
-                <span className="text-gray-400">--</span>
-              ) : (
-                mockAttempts
-              )}
+          <div className="mt-2 flex items-end justify-between">
+            <div className="flex flex-col">
+              <div className="text-5xl font-bold text-gray-900">
+                {loading ? (
+                  <span className="text-gray-300">--</span>
+                ) : (
+                  mockAttempts
+                )}
+              </div>
+              <p className="mt-3 text-sm text-gray-600 font-medium">
+                Practice attempts
+              </p>
             </div>
-            <a
-              href="/candidate/ai-mock-interview"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View attempts
-            </a>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Practice attempts completed.
-          </p>
+          <a
+            href="/candidate/ai-mock-interview"
+            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
+          >
+            View Attempts →
+          </a>
         </div>
       </section>
 
-      {/* Middle row */}
-      <section className="grid grid-cols-1 xl:grid-cols-[2.1fr_1.4fr] gap-4">
-        {/* Recommended jobs list */}
-        <div className="card p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
+      {/* Main Content - 2 Columns */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recommended Jobs - Larger Card */}
+        <div className="lg:col-span-2 card p-8 flex flex-col gap-4">
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <h3 className="font-semibold text-sm">Recommended Jobs</h3>
-              <p className="text-xs text-gray-500">
-                Roles that closely align with your profile.
+              <h2 className="text-2xl font-bold text-gray-900">
+                Recommended Opportunities
+              </h2>
+              <p className="text-base text-gray-600 mt-1">
+                Roles aligned with your skills and experience
               </p>
             </div>
             <a
               href="/candidate/job-profiles"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition whitespace-nowrap"
             >
-              View all jobs
+              View All Jobs →
             </a>
           </div>
 
-          <div className="mt-2 space-y-2">
+          <div className="mt-4 space-y-3">
             {loading ? (
-              [1, 2].map((k) => <Skeleton key={k} height={72} />)
+              [1, 2, 3].map((k) => <Skeleton key={k} height={100} />)
             ) : recommendedJobs.length === 0 ? (
-              <div className="text-xs text-gray-500 py-3">
-                No new jobs available. Check back later!
+              <div className="text-center py-12 bg-gray-50/50 rounded-xl">
+                <p className="text-lg text-gray-600 font-medium">
+                  No new jobs available right now
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Check back soon for opportunities
+                </p>
               </div>
             ) : (
-              recommendedJobs.slice(0, 4).map((job) => (
+              recommendedJobs.slice(0, 5).map((job) => (
                 <div
                   key={job.id}
-                  className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2.5 bg-white/70"
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-6 py-5 bg-white/80 hover:bg-white hover:border-indigo-200 transition"
                 >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-lg font-bold text-gray-900 truncate">
                       {job.title}
                     </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {job.company || "Company"}
+                    <div className="text-base text-gray-600 truncate mt-1">
+                      {job.company || "Company Name"}
                     </div>
                   </div>
                   <a
                     href="/candidate/job-profiles"
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                    className="ml-4 px-5 py-2.5 text-sm font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition whitespace-nowrap"
                   >
-                    View
+                    View Job
                   </a>
                 </div>
               ))
@@ -239,39 +254,47 @@ function CandidateDashboard() {
           </div>
         </div>
 
-        {/* My Applications summary */}
-        <div className="card p-4 flex flex-col gap-3">
-          <div>
-            <h3 className="font-semibold text-sm">My Applications</h3>
-            <p className="text-xs text-gray-500">
-              Track where you stand in each process.
+        {/* My Applications */}
+        <div className="card p-8 flex flex-col gap-4">
+          <div className="mb-2">
+            <h2 className="text-2xl font-bold text-gray-900">
+              My Applications
+            </h2>
+            <p className="text-base text-gray-600 mt-1">
+              Track your application progress
             </p>
           </div>
 
           {loading ? (
             <>
-              <Skeleton height={60} />
-              <Skeleton height={60} />
+              <Skeleton height={90} />
+              <Skeleton height={90} />
+              <Skeleton height={90} />
             </>
           ) : applications.length === 0 ? (
-            <div className="text-xs text-gray-500 py-2">
-              You haven&apos;t applied to any jobs yet.
+            <div className="flex flex-col items-center justify-center py-8 bg-gray-50/50 rounded-xl">
+              <p className="text-lg text-gray-600 font-medium">
+                No applications yet
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Start exploring opportunities
+              </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {applications.slice(0, 5).map((app) => (
+            <div className="space-y-3">
+              {applications.slice(0, 6).map((app) => (
                 <div
                   key={app.id}
-                  className="rounded-xl border border-gray-100 px-3 py-2.5 bg-white/70"
+                  className="rounded-xl border border-gray-200 px-5 py-4 bg-white/80 hover:bg-white hover:border-indigo-200 transition"
                 >
-                  <div className="text-sm font-semibold truncate">
+                  <div className="text-base font-bold text-gray-900 truncate">
                     {app.job?.title || "Job"}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-gray-500 flex justify-between">
-                    <span className="truncate">
+                  <div className="mt-2 text-sm text-gray-600 flex justify-between">
+                    <span className="truncate font-medium">
                       {app.job?.company || "Company"}
                     </span>
-                    <span>
+                    <span className="text-gray-500">
                       {new Date(app.createdAt).toLocaleDateString()}
                     </span>
                   </div>
@@ -282,121 +305,131 @@ function CandidateDashboard() {
         </div>
       </section>
 
-      {/* Bottom row */}
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 pb-4">
-        {/* Detailed Resume ATS */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="font-semibold text-sm">Resume ATS</h3>
-              <p className="text-xs text-gray-500">
-                Improve alignment with required skills to raise your score.
-              </p>
-            </div>
-            <a
-              href="/candidate/resume-ats"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View details
-            </a>
-          </div>
-          <div className="text-3xl font-semibold">
-            {loading ? (
-              <span className="text-gray-400">--</span>
-            ) : (
-              <>
-                {atsScore}
-                <span className="text-base opacity-60">%</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Mock Interview card */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="font-semibold text-sm">Mock Interview</h3>
-              <p className="text-xs text-gray-500">
-                Practice conversational interviews with AI.
-              </p>
-            </div>
-            <a
-              href="/candidate/ai-mock-interview"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              View attempts
-            </a>
+      {/* Bottom Section - Features */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Mock Interview Feature */}
+        <div className="card p-8 flex flex-col justify-between bg-gradient-to-br from-indigo-50 to-white border border-indigo-100">
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">
+              AI Mock Interviews
+            </h2>
+            <p className="text-base text-gray-600 mt-2">
+              Practice with AI-powered conversational interviews
+            </p>
           </div>
 
           {loading ? (
-            <div className="text-xs text-gray-500">Loading...</div>
+            <div className="text-base text-gray-600">Loading...</div>
           ) : !mockSummary || mockSummary.totalAttempts === 0 ? (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500">
-                You haven&apos;t completed any mock interview attempts yet.
+            <div className="space-y-6">
+              <p className="text-base text-gray-700 font-medium">
+                Build confidence with realistic interview simulations
               </p>
               <a
                 href="/candidate/ai-mock-interview"
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-md"
+                className="inline-flex items-center justify-center rounded-xl px-6 py-4 text-base font-bold text-white shadow-md hover:shadow-lg transition"
                 style={{
-                  background: "linear-gradient(90deg, #4f46e5, #4f46e5)",
+                  background: "linear-gradient(90deg, #4f46e5, #6366f1)",
                 }}
               >
-                Take your first test
+                Start Your First Test
               </a>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="text-2xl font-semibold">
-                {mockSummary.latestScore || 0}
-                <span className="text-sm opacity-60"> / 100</span>
+            <div className="space-y-4">
+              <div className="bg-white/60 rounded-lg p-4 border border-indigo-100">
+                <div className="text-sm text-gray-600 font-medium">
+                  Latest Score
+                </div>
+                <div className="text-4xl font-bold text-indigo-600 mt-2">
+                  {mockSummary.latestScore || 0}
+                  <span className="text-xl text-gray-600 font-semibold">
+                    {" "}
+                    / 100
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-gray-500">
-                Total attempts: <strong>{mockSummary.totalAttempts}</strong>
-                <br />
-                Average score:{" "}
-                <strong>{mockSummary.averageScore || 0}</strong>
-              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/60 rounded-lg p-3 border border-gray-200">
+                  <div className="text-xs text-gray-600 font-medium uppercase">
+                    Attempts
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mt-1">
+                    {mockSummary.totalAttempts}
+                  </div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3 border border-gray-200">
+                  <div className="text-xs text-gray-600 font-medium uppercase">
+                    Avg Score
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mt-1">
+                    {mockSummary.averageScore || 0}
+                  </div>
+                </div>
+              </div>
               <a
                 href="/candidate/ai-mock-interview"
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-md"
+                className="inline-flex items-center justify-center rounded-xl px-6 py-3 text-base font-bold text-white hover:shadow-lg transition w-full"
                 style={{
-                  background: "linear-gradient(90deg, #4f46e5, #4f46e5)",
+                  background: "linear-gradient(90deg, #4f46e5, #6366f1)",
                 }}
               >
-                Take another test
+                Take Another Test
               </a>
             </div>
           )}
         </div>
 
-        {/* Shortcuts */}
-        <div className="card p-4 flex flex-col justify-between">
-          <div>
-            <h3 className="font-semibold text-sm">Shortcuts</h3>
-            <p className="text-xs text-gray-500">
-              Jump directly to key actions.
+        {/* Quick Actions */}
+        <div className="card p-8 flex flex-col justify-between">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Quick Actions</h2>
+            <p className="text-base text-gray-600 mt-2">
+              Jump to key features in seconds
             </p>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-4">
             <a
               href="/candidate/job-profiles"
-              className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/70 px-4 py-1.5 text-xs font-semibold hover:bg-gray-50"
+              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
             >
-              Browse Jobs
+              <div>
+                <div className="text-2xl mb-2">🔍</div>
+                <div className="text-sm font-bold text-gray-900">
+                  Browse Jobs
+                </div>
+              </div>
             </a>
             <a
               href="/candidate/resume-ats"
-              className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/70 px-4 py-1.5 text-xs font-semibold hover:bg-gray-50"
+              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
             >
-              Update Resume
+              <div>
+                <div className="text-2xl mb-2">📄</div>
+                <div className="text-sm font-bold text-gray-900">
+                  Update Resume
+                </div>
+              </div>
             </a>
             <a
               href="/candidate/ai-mock-interview"
-              className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/70 px-4 py-1.5 text-xs font-semibold hover:bg-gray-50"
+              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
             >
-              Mock Interview
+              <div>
+                <div className="text-2xl mb-2">🎤</div>
+                <div className="text-sm font-bold text-gray-900">
+                  Mock Interview
+                </div>
+              </div>
+            </a>
+            <a
+              href="/candidate/forum"
+              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
+            >
+              <div>
+                <div className="text-2xl mb-2">💬</div>
+                <div className="text-sm font-bold text-gray-900">Forum</div>
+              </div>
             </a>
           </div>
         </div>
@@ -417,9 +450,9 @@ function CandidateDashboard() {
 }
 
 CandidateDashboard.getLayout = (page) => (
-  <DashboardLayout role="CANDIDATE" active="dashboard">
+  <Layout role="CANDIDATE" active="dashboard">
     {page}
-  </DashboardLayout>
+  </Layout>
 );
 
 export default CandidateDashboard;

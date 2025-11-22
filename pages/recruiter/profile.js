@@ -19,7 +19,7 @@ const DEFAULTS = {
     linkedin: "https://linkedin.com/company/your-company",
     twitter: "https://x.com/your-company",
   },
-  logoDataUrl: "", // base64 image
+  logoDataUrl: "",
   defaultJDTemplate:
     "Role: <Job Title>\nLocation: <Onsite/Remote/Hybrid>\nExperience: <X–Y years>\nSkills: React, Node, SQL, Docker\nNice-to-have: GraphQL, AWS\nAbout the role: <brief>\nResponsibilities:\n- \n- \n- \nWhy join us:\n- Impact\n- Ownership\n- Learning",
 };
@@ -29,20 +29,44 @@ export default function CompanyProfile() {
   const [saved, setSaved] = useState(false);
   const fileRef = useRef(null);
 
-  // hydrate
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) setData({ ...DEFAULTS, ...JSON.parse(raw) });
+      if (raw) {
+        const merged = { ...DEFAULTS, ...JSON.parse(raw) };
+        setData(merged);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("recruiter-company-updated", {
+              detail: { company: merged },
+            })
+          );
+        }
+      }
     } catch {
       // ignore
     }
   }, []);
 
-  // helpers
+  const broadcastCompany = (company) => {
+    try {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("recruiter-company-updated", {
+            detail: { company },
+          })
+        );
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const save = () => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(data));
+      broadcastCompany(data);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
@@ -55,6 +79,7 @@ export default function CompanyProfile() {
     setData(DEFAULTS);
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(DEFAULTS));
+      broadcastCompany(DEFAULTS);
     } catch {
       // ignore
     }
@@ -64,23 +89,34 @@ export default function CompanyProfile() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      setData((d) => ({ ...d, logoDataUrl: reader.result }));
+      const next = { ...data, logoDataUrl: reader.result };
+      setData(next);
     };
     reader.readAsDataURL(file);
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Company Profile</h1>
+    <div className="space-y-12">
+      {/* Header */}
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">
+          Company Profile 🏢
+        </h1>
+        <p className="text-lg text-gray-600">
+          Manage your company information and hiring preferences
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
-        {/* Left: Form */}
-        <div className="space-y-6">
-          {/* Identity */}
-          <div className="card">
-            <div className="flex items-start gap-5">
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: Form (2 columns) */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Logo & Identity Card */}
+          <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-8">
+              {/* Logo Upload */}
               <div className="shrink-0">
-                <div className="w-20 h-20 rounded-xl bg-white/10 overflow-hidden grid place-items-center">
+                <div className="w-24 h-24 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-gray-200 overflow-hidden grid place-items-center shadow-sm">
                   {data.logoDataUrl ? (
                     <img
                       src={data.logoDataUrl}
@@ -88,14 +124,14 @@ export default function CompanyProfile() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-lg opacity-70">🏢</span>
+                    <span className="text-4xl">🏢</span>
                   )}
                 </div>
                 <button
-                  className="btn outline w-full mt-2"
+                  className="w-full mt-4 px-4 py-2 text-sm font-semibold text-indigo-600 border border-indigo-300 rounded-lg hover:bg-indigo-50 transition-colors"
                   onClick={() => fileRef.current?.click()}
                 >
-                  {data.logoDataUrl ? "Change Logo" : "Upload Logo"}
+                  {data.logoDataUrl ? "Change" : "Upload Logo"}
                 </button>
                 <input
                   ref={fileRef}
@@ -106,11 +142,14 @@ export default function CompanyProfile() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+              {/* Identity Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
                 <div>
-                  <label className="text-sm opacity-80">Company Name</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Company Name
+                  </label>
                   <input
-                    className="input w-full mt-1"
+                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     value={data.name}
                     onChange={(e) =>
                       setData((d) => ({ ...d, name: e.target.value }))
@@ -118,9 +157,11 @@ export default function CompanyProfile() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm opacity-80">Website</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Website
+                  </label>
                   <input
-                    className="input w-full mt-1"
+                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     value={data.website}
                     onChange={(e) =>
                       setData((d) => ({ ...d, website: e.target.value }))
@@ -128,9 +169,11 @@ export default function CompanyProfile() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm opacity-80">Location</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Location
+                  </label>
                   <input
-                    className="input w-full mt-1"
+                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     value={data.location}
                     onChange={(e) =>
                       setData((d) => ({ ...d, location: e.target.value }))
@@ -139,9 +182,11 @@ export default function CompanyProfile() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm opacity-80">Company Size</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Company Size
+                    </label>
                     <select
-                      className="input w-full mt-1"
+                      className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       value={data.size}
                       onChange={(e) =>
                         setData((d) => ({ ...d, size: e.target.value }))
@@ -160,9 +205,11 @@ export default function CompanyProfile() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm opacity-80">Industry</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Industry
+                    </label>
                     <input
-                      className="input w-full mt-1"
+                      className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       value={data.industry}
                       onChange={(e) =>
                         setData((d) => ({ ...d, industry: e.target.value }))
@@ -174,11 +221,14 @@ export default function CompanyProfile() {
             </div>
           </div>
 
-          {/* About */}
-          <div className="card">
-            <label className="text-sm opacity-80">About Company</label>
+          {/* About Company Card */}
+          <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-bold text-gray-900">About Company</h3>
+              <span className="text-xl">📝</span>
+            </div>
             <textarea
-              className="textarea w-full mt-2 min-h-[140px]"
+              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[140px] resize-none"
               value={data.about}
               onChange={(e) =>
                 setData((d) => ({ ...d, about: e.target.value }))
@@ -186,13 +236,16 @@ export default function CompanyProfile() {
             />
           </div>
 
-          {/* Hiring Preferences */}
-          <div className="card">
-            <label className="text-sm opacity-80">
-              Hiring Preferences / Notes
-            </label>
+          {/* Hiring Preferences Card */}
+          <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                Hiring Preferences
+              </h3>
+              <span className="text-xl">🎯</span>
+            </div>
             <textarea
-              className="textarea w-full mt-2 min-h-[100px]"
+              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[100px] resize-none"
               value={data.hiringPreferences}
               onChange={(e) =>
                 setData((d) => ({
@@ -201,11 +254,15 @@ export default function CompanyProfile() {
                 }))
               }
             />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+
+            {/* Social Links */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-100">
               <div>
-                <label className="text-sm opacity-80">LinkedIn</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  LinkedIn Profile
+                </label>
                 <input
-                  className="input w-full mt-1"
+                  className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   value={data.socials.linkedin}
                   onChange={(e) =>
                     setData((d) => ({
@@ -216,9 +273,11 @@ export default function CompanyProfile() {
                 />
               </div>
               <div>
-                <label className="text-sm opacity-80">Twitter/X</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Twitter / X Profile
+                </label>
                 <input
-                  className="input w-full mt-1"
+                  className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   value={data.socials.twitter}
                   onChange={(e) =>
                     setData((d) => ({
@@ -231,12 +290,17 @@ export default function CompanyProfile() {
             </div>
           </div>
 
-          {/* Default JD Template */}
-          <div className="card">
-            <div className="flex items-center justify-between">
-              <label className="text-sm opacity-80">Default JD Template</label>
+          {/* Default JD Template Card */}
+          <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-900">
+                  Default JD Template
+                </h3>
+                <span className="text-xl">📋</span>
+              </div>
               <button
-                className="btn ghost"
+                className="text-sm font-semibold text-gray-600 hover:text-indigo-600 transition-colors px-3 py-1"
                 onClick={() =>
                   setData((d) => ({
                     ...d,
@@ -244,11 +308,11 @@ export default function CompanyProfile() {
                   }))
                 }
               >
-                Reset Template
+                Reset
               </button>
             </div>
             <textarea
-              className="textarea w-full mt-2 min-h-[220px]"
+              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[220px] resize-none font-mono"
               value={data.defaultJDTemplate}
               onChange={(e) =>
                 setData((d) => ({
@@ -259,80 +323,106 @@ export default function CompanyProfile() {
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3">
-            <button className="btn primary" onClick={save}>
-              Save Changes
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              onClick={save}
+              className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold rounded-lg hover:shadow-lg hover:scale-105 transition-all"
+            >
+              Save Changes ✓
             </button>
-            <button className="btn outline" onClick={reset}>
+            <button
+              onClick={reset}
+              className="px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+            >
               Reset to Defaults
             </button>
             {saved && (
-              <span className="text-sm text-emerald-300">Saved!</span>
+              <div className="flex items-center gap-2 text-emerald-600 font-semibold">
+                <span>✓</span> Saved successfully!
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right: Preview */}
-        <div className="space-y-6">
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-white/10 overflow-hidden grid place-items-center shrink-0">
-                {data.logoDataUrl ? (
-                  <img
-                    src={data.logoDataUrl}
-                    alt="Logo"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>🏢</span>
-                )}
-              </div>
-              <div>
-                <div className="font-semibold">{data.name}</div>
-                <div className="text-xs opacity-70">
-                  {data.industry} • {data.size}
-                </div>
-                <a
-                  className="text-xs text-sky-300 hover:underline"
-                  href={data.website}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {data.website}
-                </a>
-              </div>
-            </div>
-            <div className="mt-4 text-sm whitespace-pre-wrap opacity-90">
-              {data.about}
-            </div>
-            <div className="mt-3 text-xs opacity-70">
-              {data.location} •{" "}
-              <a
-                className="hover:underline"
-                href={data.socials.linkedin}
-                target="_blank"
-                rel="noreferrer"
-              >
-                LinkedIn
-              </a>{" "}
-              •{" "}
-              <a
-                className="hover:underline"
-                href={data.socials.twitter}
-                target="_blank"
-                rel="noreferrer"
-              >
-                X
-              </a>
-            </div>
-          </div>
+        {/* Right: Preview (1 column) */}
+        <div className="space-y-8">
+          {/* Company Preview Card */}
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-8 sticky top-8">
+            <h3 className="text-sm font-bold text-indigo-900 uppercase tracking-wide mb-6">
+              Preview
+            </h3>
 
-          <div className="card">
-            <div className="font-semibold mb-2">JD Template Preview</div>
-            <pre className="whitespace-pre-wrap text-sm opacity-90">
-              {data.defaultJDTemplate}
-            </pre>
+            <div className="bg-white rounded-lg p-6 border border-indigo-100">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-100 to-blue-100 overflow-hidden grid place-items-center shrink-0 border border-indigo-200">
+                  {data.logoDataUrl ? (
+                    <img
+                      src={data.logoDataUrl}
+                      alt="Logo"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-2xl">🏢</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-gray-900 text-lg">
+                    {data.name}
+                  </div>
+                  <div className="text-xs font-semibold text-gray-500 mt-1">
+                    {data.industry} • {data.size}
+                  </div>
+                  <a
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 mt-2 inline-block"
+                    href={data.website}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Visit Website →
+                  </a>
+                </div>
+              </div>
+
+              <div className="space-y-4 border-t border-gray-100 pt-4">
+                <div>
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                    About
+                  </div>
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    {data.about}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                    Location
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {data.location}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <a
+                    href={data.socials.linkedin}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    LinkedIn
+                  </a>
+                  <a
+                    href={data.socials.twitter}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    X / Twitter
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -340,7 +430,6 @@ export default function CompanyProfile() {
   );
 }
 
-/* ✅ Use the new unified dashboard layout with sticky sidebar + chat */
 CompanyProfile.getLayout = function getLayout(page) {
   return (
     <DashboardLayout role="RECRUITER" active="company-profile">

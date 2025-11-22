@@ -2,6 +2,8 @@
 import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
 
+const LS_KEY = "recruiter.company";
+
 export default function UserMenu({ name = "User", role = "CANDIDATE" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -10,6 +12,63 @@ export default function UserMenu({ name = "User", role = "CANDIDATE" }) {
   const roleSafe = String(role || "CANDIDATE").toUpperCase();
   const isCandidate = roleSafe === "CANDIDATE";
   const base = isCandidate ? "/candidate" : "/recruiter";
+
+  // what we actually display in the chip/dropdown
+  const [displayName, setDisplayName] = useState(name);
+
+  // keep displayName in sync with prop for candidates
+  useEffect(() => {
+    if (isCandidate) {
+      setDisplayName(name || "User");
+    }
+  }, [name, isCandidate]);
+
+  // for recruiters: hydrate from localStorage + listen for updates
+  useEffect(() => {
+    if (isCandidate || typeof window === "undefined") return;
+
+    const loadFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed?.name) {
+          setDisplayName(parsed.name);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // initial load
+    loadFromStorage();
+
+    // custom event from CompanyProfile (save/reset/hydrate)
+    const handleCompanyUpdated = (e) => {
+      const company = e?.detail?.company;
+      if (company?.name) {
+        setDisplayName(company.name);
+      }
+    };
+
+    // storage event (other tabs/windows)
+    const handleStorage = (e) => {
+      if (e.key === LS_KEY) {
+        loadFromStorage();
+      }
+    };
+
+    window.addEventListener("recruiter-company-updated", handleCompanyUpdated);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        "recruiter-company-updated",
+        handleCompanyUpdated
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [isCandidate]);
 
   useEffect(() => {
     const onClick = (e) => {
@@ -39,9 +98,10 @@ export default function UserMenu({ name = "User", role = "CANDIDATE" }) {
   };
 
   const initials =
-    name && typeof name === "string"
-      ? name
+    displayName && typeof displayName === "string"
+      ? displayName
           .split(" ")
+          .filter(Boolean)
           .map((p) => p[0])
           .join("")
           .slice(0, 2)
@@ -57,7 +117,9 @@ export default function UserMenu({ name = "User", role = "CANDIDATE" }) {
         aria-expanded={open}
       >
         <span className="avatar">{initials}</span>
-        <span className="name hidden sm:inline">{name}</span>
+        <span className="name hidden sm:inline">
+          {displayName || "User"}
+        </span>
       </button>
 
       {open && (
@@ -65,7 +127,9 @@ export default function UserMenu({ name = "User", role = "CANDIDATE" }) {
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">
             Signed in as
           </div>
-          <div className="px-3 py-2 text-sm font-medium">{name}</div>
+          <div className="px-3 py-2 text-sm font-medium">
+            {displayName || "User"}
+          </div>
 
           <button
             className="w-full text-left dropdown-item"

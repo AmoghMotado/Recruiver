@@ -1,8 +1,8 @@
+// pages/candidate/mock-test-live.js (Updated version)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import Layout from "../../components/Layout";
 
-// Simple bank (front-end only). We'll shuffle once per session.
 const QUESTION_BANK = [
   {
     q: "If the average of five numbers is 24, and the sum of four numbers is 92, what is the fifth number?",
@@ -80,7 +80,7 @@ export default function MockTestLive() {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [status, setStatus] = useState([]);
-  const [secondsLeft, setSecondsLeft] = useState(600); // 10 minutes
+  const [secondsLeft, setSecondsLeft] = useState(600);
 
   useEffect(() => {
     let savedOrder = null;
@@ -106,9 +106,7 @@ export default function MockTestLive() {
           await videoRef.current.play();
         }
       } catch (e) {
-        setStreamErr(
-          "Camera preview unavailable. You can continue the test, but enable permissions in browser for best experience."
-        );
+        setStreamErr("Camera unavailable. You can continue the test.");
       }
     })();
     return () => {
@@ -130,7 +128,6 @@ export default function MockTestLive() {
       });
     }, 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const question = useMemo(() => {
@@ -217,13 +214,12 @@ export default function MockTestLive() {
     if (order.length) {
       updateStatus(0, STATUS.VISITED);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.length]);
 
   if (!question) {
     return (
-      <div className="card">
-        <div>Loading questions…</div>
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <p className="text-lg text-gray-600 font-medium">Loading questions…</p>
       </div>
     );
   }
@@ -231,99 +227,132 @@ export default function MockTestLive() {
   const selected = answers[question.bankIndex];
 
   return (
-    <div className="space-y-6">
-      {/* Top controls */}
-      <div className="card flex flex-col items-center gap-3">
-        <div className="flex items-center gap-4">
-          <div className="rounded-lg overflow-hidden bg-black/30">
-            <video ref={videoRef} autoPlay muted playsInline className="w-40 h-24 object-cover" />
+    <div className="space-y-6 pb-8">
+      {/* Header with Timer & Video */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="flex items-center justify-between gap-8">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900">
+              Question {idx + 1} of {order.length}
+            </h2>
+            <p className="text-base text-gray-600 mt-2">{question.q}</p>
           </div>
-          <div className="text-sm">
-            <div className="text-center text-2xl font-semibold">{mmss}</div>
-            <div className="opacity-70 text-center">Time Remaining</div>
+
+          <div className="flex flex-col items-center gap-3 flex-shrink-0">
+            <div className="rounded-lg overflow-hidden bg-black w-32 h-24">
+              <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            </div>
+            <div className={`text-3xl font-bold font-mono ${secondsLeft < 60 ? "text-red-600" : "text-indigo-600"}`}>
+              {mmss}
+            </div>
+            {streamErr && <div className="text-xs text-yellow-600 text-center">{streamErr}</div>}
           </div>
         </div>
-        {streamErr && <div className="text-xs text-yellow-300">{streamErr}</div>}
       </div>
 
-      {/* Question panel */}
-      <div className="card">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm opacity-70">Question {idx + 1} of {order.length}</div>
-            <h3 className="text-lg font-semibold mt-1">{question.q}</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="btn outline" onClick={goPrev} disabled={idx === 0}>
-              Previous
-            </button>
-            {idx < order.length - 1 ? (
-              <>
-                <button className="btn ghost" onClick={skip}>Skip</button>
-                <button className="btn primary" onClick={goNext}>Next</button>
-              </>
-            ) : (
-              <button className="btn primary" onClick={() => handleSubmit(false)}>
-                Submit
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3">
+      {/* Options */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="space-y-3 mb-8">
           {question.options.map((opt, i) => {
             const active = i === selected;
             return (
               <button
                 key={i}
                 onClick={() => selectOption(i)}
-                className={`text-left card transition ${
-                  active ? "ring-2 ring-sky-400" : "hover:bg-white/5"
+                className={`w-full text-left px-6 py-4 rounded-lg border-2 transition-all font-semibold text-lg ${
+                  active
+                    ? "bg-indigo-50 border-indigo-400 text-indigo-900"
+                    : "bg-gray-50 border-gray-200 text-gray-900 hover:border-indigo-200"
                 }`}
               >
-                <div className="font-medium">{String.fromCharCode(65 + i)}.</div>
-                <div className="opacity-90">{opt}</div>
+                <span className="inline-block w-8 h-8 rounded-full mr-4 text-center font-bold text-base">
+                  {String.fromCharCode(65 + i)}
+                </span>
+                {opt}
               </button>
             );
           })}
         </div>
+
+        {/* Controls */}
+        <div className="flex gap-4 justify-between">
+          <button
+            onClick={goPrev}
+            disabled={idx === 0}
+            className="px-6 py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            ← Previous
+          </button>
+
+          <div className="flex gap-3">
+            <button
+              onClick={skip}
+              className="px-6 py-3 rounded-lg font-bold border-2 border-orange-300 text-orange-700 hover:bg-orange-50 transition-all"
+            >
+              ⊘ Skip
+            </button>
+            {idx < order.length - 1 ? (
+              <button
+                onClick={goNext}
+                className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:shadow-lg transition-all"
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                onClick={() => handleSubmit(false)}
+                className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg transition-all"
+              >
+                ✓ Submit
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Navigator */}
-      <div className="card">
-        <h4 className="font-semibold mb-3">Questions</h4>
-        <div className="flex flex-wrap gap-2">
+      {/* Question Navigator */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Question Navigator</h3>
+        <div className="flex flex-wrap gap-2 mb-4">
           {order.map((_, i) => {
             const s = status[i] || STATUS.UNVISITED;
-            let color = "bg-gray-600";
-            if (s === STATUS.VISITED) color = "bg-sky-500";
-            if (s === STATUS.ATTEMPTED) color = "bg-emerald-500";
-            if (s === STATUS.SKIPPED) color = "bg-orange-500";
-            const active = i === idx ? "ring-2 ring-white/70" : "";
+            let bgColor = "bg-gray-300";
+            if (s === STATUS.VISITED) bgColor = "bg-blue-500";
+            if (s === STATUS.ATTEMPTED) bgColor = "bg-emerald-500";
+            if (s === STATUS.SKIPPED) bgColor = "bg-orange-500";
+            const active = i === idx ? "ring-2 ring-offset-2 ring-indigo-500" : "";
             return (
               <button
                 key={i}
-                className={`w-9 h-9 rounded-md text-sm font-semibold ${active}`}
                 onClick={() => {
                   updateStatus(i, STATUS.VISITED);
                   setIdx(i);
                 }}
+                className={`w-10 h-10 rounded-lg font-bold text-white transition-all ${bgColor} ${active}`}
                 title={s}
               >
-                <span
-                  className={`inline-flex items-center justify-center w-full h-full rounded-md ${color}`}
-                >
-                  {i + 1}
-                </span>
+                {i + 1}
               </button>
             );
           })}
         </div>
-        <div className="mt-3 text-xs opacity-75 flex gap-4">
-          <span><span className="inline-block w-3 h-3 bg-gray-600 rounded-sm mr-1" />Unvisited</span>
-          <span><span className="inline-block w-3 h-3 bg-sky-500 rounded-sm mr-1" />Visited</span>
-          <span><span className="inline-block w-3 h-3 bg-emerald-500 rounded-sm mr-1" />Attempted</span>
-          <span><span className="inline-block w-3 h-3 bg-orange-500 rounded-sm mr-1" />Skipped</span>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-gray-300" />
+            <span className="text-gray-600">Not Visited</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-blue-500" />
+            <span className="text-gray-600">Visited</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-emerald-500" />
+            <span className="text-gray-600">Attempted</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-orange-500" />
+            <span className="text-gray-600">Skipped</span>
+          </div>
         </div>
       </div>
     </div>

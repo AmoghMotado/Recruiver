@@ -1,4 +1,4 @@
-// pages/candidate/ats-basic.js
+// ATS BASIC PAGE - pages/candidate/ats-basic.js
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 
@@ -37,13 +37,11 @@ export default function ATSBasic() {
     return () => clearTimeout(timer);
   }, []);
 
-  // prefer backend score, fallback if missing
   const score = useMemo(() => {
     if (atsResult && typeof atsResult.score === "number") {
       return Math.max(0, Math.min(100, Math.round(atsResult.score)));
     }
     if (!resumeText) return 0;
-
     const len = resumeText.length;
     const est = 30 + Math.min(60, Math.floor(len / 500) * 10);
     return Math.max(10, Math.min(95, est));
@@ -51,7 +49,6 @@ export default function ATSBasic() {
 
   const breakdown = atsResult?.breakdown || null;
 
-  // Prefer backend enhancements -> fallback text
   const backendEnhancements =
     atsResult?.enhancements && atsResult.enhancements.length
       ? atsResult.enhancements
@@ -69,31 +66,30 @@ export default function ATSBasic() {
 
   const isPdf = fileMeta?.name && /\.pdf$/i.test(fileMeta.name);
 
-  // parameter config (labels + what we show)
   const paramConfig = [
-    ["sections", "Sections & structure"],
+    ["sections", "Sections & Structure"],
     ["formatting", "Formatting"],
     ["parseability", "Parse-ability"],
-    ["length", "Length suitability"],
-    ["readability", "Sentence readability"],
-    ["contact", "Contact information"],
-    ["richness", "Content richness"],
-    ["keywords", "Technical keywords"],
-    ["balance", "Overall balance"],
+    ["length", "Length Suitability"],
+    ["readability", "Sentence Readability"],
+    ["contact", "Contact Information"],
+    ["richness", "Content Richness"],
+    ["keywords", "Technical Keywords"],
+    ["balance", "Overall Balance"],
   ];
 
   const getScoreColorClass = (value) => {
     if (value == null || Number.isNaN(value)) return "text-gray-400";
-    if (value < 40) return "text-red-500";
-    if (value < 70) return "text-amber-500";
-    return "text-emerald-500";
+    if (value < 40) return "text-red-600";
+    if (value < 70) return "text-amber-600";
+    return "text-emerald-600";
   };
 
   const getBadgeBgClass = (value) => {
     if (value == null || Number.isNaN(value)) return "bg-gray-100";
-    if (value < 40) return "bg-red-50";
-    if (value < 70) return "bg-amber-50";
-    return "bg-emerald-50";
+    if (value < 40) return "bg-red-50 border-red-200";
+    if (value < 70) return "bg-amber-50 border-amber-200";
+    return "bg-emerald-50 border-emerald-200";
   };
 
   const handleDownloadReport = async () => {
@@ -122,8 +118,7 @@ export default function ATSBasic() {
 
       const bd = atsResult.breakdown || {};
       paramConfig.forEach(([key, label]) => {
-        const v =
-          typeof bd[key] === "number" ? Math.round(bd[key]) : null;
+        const v = typeof bd[key] === "number" ? Math.round(bd[key]) : null;
         const line = `${label}: ${v != null ? v + "/100" : "N/A"}`;
         doc.text(line, 14, y);
         y += 6;
@@ -211,110 +206,116 @@ export default function ATSBasic() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_1.3fr_1.3fr] gap-6">
-        {/* LEFT COLUMN */}
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900">ATS Analysis Results</h1>
+        <p className="text-lg text-gray-600 mt-3">
+          Detailed breakdown of your resume's ATS compatibility and actionable suggestions for improvement
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* LEFT COLUMN - Score & Enhancements */}
         <div className="space-y-6">
-          <div className="card flex flex-col items-center gap-3">
-            <div className="text-sm opacity-75">
-              Career Level: {careerLevel || "—"}
+          {/* Score Card */}
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="text-center">
+              <div className="text-sm font-semibold text-gray-600 mb-4">
+                {careerLevel ? `Career Level: ${careerLevel}` : "Career Level: Not specified"}
+              </div>
+              <ScoreRing score={score} label="ATS Score" />
+              <p className="text-sm text-gray-600 mt-6">
+                Score generated from AI-based parsing of your uploaded resume
+              </p>
             </div>
-            <ScoreRing score={score} label="ATS Score" />
-            <p className="text-xs text-gray-500 text-center mt-1">
-              Score generated from AI-based parsing of your uploaded resume.
-            </p>
           </div>
 
-          <div className="card">
-            <h3 className="font-semibold text-lg mb-2">
-              AI-Based Enhancements
+          {/* Enhancements Card */}
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              💡 AI-Based Enhancements
             </h3>
-            <p className="text-xs text-gray-500 mb-2">
-              Suggestions below are generated from your resume’s current
-              structure, content, and ATS signals.
+            <p className="text-sm text-gray-700 mb-4">
+              Suggestions tailored to improve your resume's ATS performance
             </p>
-            <ul className="list-disc pl-5 mt-1 space-y-1 text-sm">
-              {suggestions.map((s) => (
-                <li key={s}>{s}</li>
+            <ul className="space-y-3">
+              {suggestions.map((s, i) => (
+                <li key={i} className="flex gap-3 text-sm">
+                  <span className="text-indigo-600 font-bold flex-shrink-0 mt-0.5">✓</span>
+                  <span className="text-gray-700">{s}</span>
+                </li>
               ))}
             </ul>
           </div>
         </div>
 
-        {/* MIDDLE COLUMN */}
-        <div className="space-y-4">
-          <div className="card h-full">
-            <div className="flex items-center justify-between mb-3 gap-3">
-              <div>
-                <h3 className="font-semibold text-lg">
-                  ATS Parameter Breakdown
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Each parameter is scored out of 100. Your overall ATS score is
-                  a weighted combination of these signals from the backend
-                  model.
-                </p>
-              </div>
-              <button
-                className="btn outline text-xs md:text-sm"
-                onClick={handleDownloadReport}
-                disabled={!atsResult}
-              >
-                Download ATS Report
-              </button>
-            </div>
-
-            {breakdown ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {paramConfig.map(([key, label]) => {
-                  const raw = breakdown[key];
-                  const value =
-                    typeof raw === "number" ? Math.round(raw) : null;
-                  const color = getScoreColorClass(value);
-                  const badgeBg = getBadgeBgClass(value);
-
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-100 bg-white/60 text-sm"
-                    >
-                      <span className="text-gray-700">{label}</span>
-                      <span
-                        className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeBg} ${color}`}
-                      >
-                        {value != null ? `${value}/100` : "--"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">
-                Run an ATS analysis from the <strong>Resume ATS</strong> page to
-                see a detailed parameter breakdown here.
-              </div>
-            )}
+        {/* MIDDLE COLUMN - Parameter Breakdown */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Parameter Breakdown
+            </h2>
+            <p className="text-sm text-gray-600">
+              Each parameter is scored out of 100. Your overall ATS score is a weighted combination of these signals.
+            </p>
           </div>
+
+          {breakdown ? (
+            <div className="space-y-3">
+              {paramConfig.map(([key, label]) => {
+                const raw = breakdown[key];
+                const value = typeof raw === "number" ? Math.round(raw) : null;
+                const color = getScoreColorClass(value);
+                const badgeBg = getBadgeBgClass(value);
+
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center justify-between px-4 py-3 rounded-lg border ${badgeBg} bg-white/40`}
+                  >
+                    <span className="text-sm font-semibold text-gray-800">{label}</span>
+                    <span
+                      className={`text-lg font-bold ${color}`}
+                    >
+                      {value != null ? value : "--"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 text-center py-8">
+              Run an ATS analysis from the <strong>Resume ATS</strong> page to see detailed metrics
+            </div>
+          )}
+
+          <button
+            className="w-full mt-6 px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-bold rounded-lg hover:shadow-lg transition-all"
+            onClick={handleDownloadReport}
+            disabled={!atsResult}
+          >
+            📥 Download Report
+          </button>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="space-y-6">
-          <div className="card">
-            <h3 className="font-semibold text-lg mb-2">Resume Preview</h3>
+        {/* RIGHT COLUMN - Resume Preview */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 overflow-hidden flex flex-col">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Resume Preview</h2>
+          <div className="flex-1 overflow-auto bg-gray-900 rounded-lg p-4">
             {isPdf && pdfUrl ? (
               <object
                 data={pdfUrl}
                 type="application/pdf"
-                className="w-full h-[600px] rounded-lg"
+                className="w-full h-full"
               >
-                <p className="text-sm">
+                <p className="text-sm text-gray-300 p-4">
                   PDF preview unavailable. Download and open manually.
                 </p>
               </object>
             ) : (
-              <pre className="text-sm whitespace-pre-wrap opacity-90">
-                {resumeText ||
-                  "No resume found. Go to Resume ATS and upload one."}
+              <pre className="text-sm text-gray-100 whitespace-pre-wrap font-mono leading-relaxed">
+                {resumeText || "No resume found. Go to Resume ATS and upload one."}
               </pre>
             )}
           </div>
@@ -342,7 +343,7 @@ function ScoreRing({ score = 72, label = "Score" }) {
           </linearGradient>
         </defs>
         <circle
-          stroke="rgba(255,255,255,0.15)"
+          stroke="rgba(226,232,240,0.9)"
           fill="transparent"
           strokeWidth={stroke}
           r={normalizedRadius}
@@ -365,13 +366,14 @@ function ScoreRing({ score = 72, label = "Score" }) {
           y="50%"
           dominantBaseline="middle"
           textAnchor="middle"
-          fontSize="28"
+          fontSize="32"
           fontWeight="700"
+          fill="#111827"
         >
           {pct}
         </text>
       </svg>
-      <div className="text-sm opacity-75">{label}</div>
+      <div className="text-base font-semibold text-gray-600 mt-3">{label}</div>
     </div>
   );
 }

@@ -23,9 +23,13 @@ export default function JobModal({ open, initial, onClose, onSave }) {
         location: initial.location || "",
         salaryRange: initial.salaryRange || "",
         experience: initial.experience || "",
-        deadline: initial.deadline || "",
+        // initial.deadline from table is already pretty string, but for editing
+        // we prefer raw YYYY-MM-DD if available on the job object
+        deadline: initial.rawDeadline || "",
         description: initial.description || "",
         status: initial.status || "Open",
+        id: initial.id,
+        jdFilePath: initial.jdFilePath || "",
       });
       setFile(null);
     } else if (open && !initial) {
@@ -59,38 +63,16 @@ export default function JobModal({ open, initial, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Required fields: everything except Location and Job Description (Text)
-    if (!form.title.trim()) {
-      alert("Job title is required");
-      return;
-    }
-    if (!form.company.trim()) {
-      alert("Company name is required");
-      return;
-    }
-    if (!form.experience.trim()) {
-      alert("Experience is required");
-      return;
-    }
-    if (!form.salaryRange.trim()) {
-      alert("Salary range is required");
-      return;
-    }
-    if (!form.deadline) {
-      alert("Application deadline is required");
-      return;
-    }
-    if (!form.status) {
-      alert("Status is required");
-      return;
-    }
+    if (!form.title.trim()) return alert("Job title is required");
+    if (!form.company.trim()) return alert("Company name is required");
+    if (!form.experience.trim()) return alert("Experience is required");
+    if (!form.salaryRange.trim()) return alert("Salary range is required");
+    if (!form.deadline) return alert("Application deadline is required");
 
     setUploading(true);
-
     try {
-      let jdFilePath = initial?.jdFilePath || "";
+      let jdFilePath = form.jdFilePath || initial?.jdFilePath || "";
 
-      // If user uploaded a new file, upload it first
       if (file) {
         const formData = new FormData();
         formData.append("jd", file);
@@ -108,10 +90,8 @@ export default function JobModal({ open, initial, onClose, onSave }) {
         jdFilePath = uploadData.filePath;
       }
 
-      // Save job with file path
-      onSave({
+      await onSave({
         ...form,
-        id: initial?.id,
         jdFilePath,
       });
     } catch (err) {
@@ -132,10 +112,10 @@ export default function JobModal({ open, initial, onClose, onSave }) {
       <div className="relative z-10 w-full max-w-2xl card max-h-[90vh] overflow-auto">
         <form onSubmit={handleSubmit} className="space-y-4">
           <h2 className="text-xl font-semibold mb-4">
-            {initial ? "Edit Job Posting" : "Add New Job Posting"}
+            {form.id ? "Edit Job Posting" : "Add New Job Posting"}
           </h2>
 
-          {/* Job Title (required) */}
+          {/* Job Title */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Job Title <span className="text-red-500">*</span>
@@ -145,12 +125,11 @@ export default function JobModal({ open, initial, onClose, onSave }) {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="e.g. Senior Frontend Developer"
-              className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-              required
+              className="input"
             />
           </div>
 
-          {/* Company (required) */}
+          {/* Company */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Company <span className="text-red-500">*</span>
@@ -160,14 +139,12 @@ export default function JobModal({ open, initial, onClose, onSave }) {
               value={form.company}
               onChange={(e) => setForm({ ...form, company: e.target.value })}
               placeholder="e.g. TechCorp Inc."
-              className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-              required
+              className="input"
             />
           </div>
 
           {/* Location & Experience */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Location (optional) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">
                 Location
@@ -178,12 +155,10 @@ export default function JobModal({ open, initial, onClose, onSave }) {
                 onChange={(e) =>
                   setForm({ ...form, location: e.target.value })
                 }
-                placeholder="e.g. Remote, NYC"
-                className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. Remote, Pune"
+                className="input"
               />
             </div>
-
-            {/* Experience (required) */}
             <div>
               <label className="block text-sm font-medium mb-2">
                 Experience <span className="text-red-500">*</span>
@@ -194,16 +169,14 @@ export default function JobModal({ open, initial, onClose, onSave }) {
                 onChange={(e) =>
                   setForm({ ...form, experience: e.target.value })
                 }
-                placeholder="e.g. 3-5 years"
-                className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-                required
+                placeholder="e.g. 0–2 years"
+                className="input"
               />
             </div>
           </div>
 
           {/* Salary Range & Deadline */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Salary Range (required) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">
                 Salary Range <span className="text-red-500">*</span>
@@ -214,13 +187,10 @@ export default function JobModal({ open, initial, onClose, onSave }) {
                 onChange={(e) =>
                   setForm({ ...form, salaryRange: e.target.value })
                 }
-                placeholder="e.g. $120k - $180k"
-                className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-                required
+                placeholder="e.g. ₹6 LPA – ₹8 LPA"
+                className="input"
               />
             </div>
-
-            {/* Application Deadline (required) */}
             <div>
               <label className="block text-sm font-medium mb-2">
                 Application Deadline <span className="text-red-500">*</span>
@@ -231,13 +201,12 @@ export default function JobModal({ open, initial, onClose, onSave }) {
                 onChange={(e) =>
                   setForm({ ...form, deadline: e.target.value })
                 }
-                className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-                required
+                className="input"
               />
             </div>
           </div>
 
-          {/* Job Description (Text) – optional */}
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Job Description (Text)
@@ -248,12 +217,13 @@ export default function JobModal({ open, initial, onClose, onSave }) {
                 setForm({ ...form, description: e.target.value })
               }
               placeholder="Describe the role, responsibilities, and requirements..."
-              rows={6}
-              className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none resize-none"
+              rows={5}
+              className="input"
+              style={{ minHeight: 120, resize: "vertical" }}
             />
           </div>
 
-          {/* Upload Job Description File (optional, no star) */}
+          {/* JD File upload */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Upload Job Description (PDF/Word)
@@ -262,21 +232,21 @@ export default function JobModal({ open, initial, onClose, onSave }) {
               type="file"
               accept=".pdf,.doc,.docx"
               onChange={handleFileChange}
-              className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer hover:file:bg-blue-700"
+              className="w-full text-sm"
             />
             {file && (
-              <p className="text-xs text-green-400 mt-2">
+              <p className="text-xs text-emerald-600 mt-1">
                 Selected: {file.name}
               </p>
             )}
-            {initial?.jdFilePath && !file && (
-              <p className="text-xs text-blue-400 mt-2">
-                Current file: {initial.jdFilePath.split("/").pop()}
+            {!file && form.jdFilePath && (
+              <p className="text-xs text-indigo-600 mt-1">
+                Current file: {form.jdFilePath.split("/").pop()}
               </p>
             )}
           </div>
 
-          {/* Status (required) */}
+          {/* Status */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Status <span className="text-red-500">*</span>
@@ -284,8 +254,7 @@ export default function JobModal({ open, initial, onClose, onSave }) {
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none"
-              required
+              className="input"
             >
               <option value="Open">Open</option>
               <option value="Closed">Closed</option>
@@ -296,12 +265,12 @@ export default function JobModal({ open, initial, onClose, onSave }) {
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              className="btn primary flex-1"
+              className="btn flex-1"
               disabled={uploading}
             >
               {uploading
                 ? "Saving..."
-                : initial
+                : form.id
                 ? "Update Job"
                 : "Create Job"}
             </button>
