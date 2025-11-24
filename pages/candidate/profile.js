@@ -1,3 +1,11 @@
+/* Attach per-page layout */
+CandidateProfilePage.getLayout = (page) => (
+  <Layout active="profile" role="CANDIDATE">
+    {page}
+  </Layout>
+);
+
+export default CandidateProfilePage;// pages/candidate/profile.js
 import { useEffect, useState, useRef, useMemo } from "react";
 import Layout from "@/components/Layout";
 
@@ -11,12 +19,39 @@ const SECTION_ORDER = [
   "links",
 ];
 
+// --- DATE HELPER: convert dd-mm-yyyy -> yyyy-mm-dd for <input type="date"> ---
+const formatDateForInput = (dateStr) => {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr; // already ok
+
+  const parts = String(dateStr).split("-");
+  if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
+    // dd-mm-yyyy -> yyyy-mm-dd
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
+// Try a few possible keys where your login might have stored email
+const getStoredEmail = () => {
+  if (typeof window === "undefined") return "";
+  return (
+    localStorage.getItem("candidateEmail") ||
+    localStorage.getItem("userEmail") ||
+    localStorage.getItem("email") ||
+    ""
+  );
+};
+
 function CandidateProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // User basics (User table)
+  // We no longer depend on Firebase Auth here
+  const [emailKey, setEmailKey] = useState("");
+
+  // User basics
   const [user, setUser] = useState({
     firstName: "",
     lastName: "",
@@ -26,11 +61,9 @@ function CandidateProfilePage() {
     gender: "",
   });
 
-  // CandidateProfile fields
+  // Candidate profile extras
   const [bio, setBio] = useState({ headline: "", summary: "" });
   const [skills, setSkills] = useState([]);
-
-  // JSON sections
   const [education, setEducation] = useState([]);
   const [experience, setExperience] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -46,6 +79,7 @@ function CandidateProfilePage() {
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // Track visible section
   useEffect(() => {
     const obs = new IntersectionObserver(
       (entries) => {
@@ -60,102 +94,89 @@ function CandidateProfilePage() {
         threshold: [0, 0.25, 0.5, 0.75, 1],
       }
     );
+
     SECTION_ORDER.forEach((id) => {
       const el = sectionRefs.current[id];
       if (el) obs.observe(el);
     });
+
     return () => obs.disconnect();
   }, []);
 
-  // Load profile
+  // 🔐 Load profile via /api/profile/candidate (using email as key)
   useEffect(() => {
-    (async function load() {
+    let cancelled = false;
+
+    async function load() {
       try {
         setLoading(true);
-        const res = await fetch("/api/profile/candidate");
+        setError("");
+
+        const storedEmail = getStoredEmail();
+
+        if (!storedEmail) {
+          setError("Please sign in to view and edit your profile.");
+          return;
+        }
+
+        setEmailKey(storedEmail.toLowerCase());
+
+        const res = await fetch(
+          `/api/profile/candidate?email=${encodeURIComponent(storedEmail)}`
+        );
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.message || "Failed to load profile");
+
+        if (!res.ok) {
+          throw new Error(data?.error || data?.message || "Failed to load profile");
+        }
+
+        if (cancelled) return;
 
         const u = data.user || {};
         const c = data.candidate || {};
+
         setUser({
           firstName: u.firstName || "",
           lastName: u.lastName || "",
-          email: u.email || "",
+          email: u.email || storedEmail,
           phone: u.phone || "",
-          dob: u.dob ? String(u.dob).slice(0, 10) : "",
+          dob: formatDateForInput(u.dob || ""),
           gender: u.gender || "",
         });
+
         setBio({
           headline: c.headline || "",
           summary: c.summary || "",
         });
+
         setSkills(Array.isArray(c.skills) ? c.skills : []);
         setEducation(Array.isArray(c.education) ? c.education : []);
         setExperience(Array.isArray(c.experience) ? c.experience : []);
         setProjects(Array.isArray(c.projects) ? c.projects : []);
         setLinks(Array.isArray(c.links) ? c.links : []);
-        setError("");
       } catch (e) {
-        setError(e.message || "Load failed");
+        console.error("Error loading profile:", e);
+        if (!cancelled) {
+          setError(
+            e.message || "Error loading profile. Please try again."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Save profile
-  const save = async () => {
-    try {
-      setSaving(true);
-      setError("");
-      const payload = {
-        user: { ...user },
-        candidate: {
-          headline: bio.headline,
-          summary: bio.summary,
-          skills,
-          education,
-          experience,
-          projects,
-          links,
-        },
-      };
-      const res = await fetch("/api/profile/candidate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Failed to save profile");
-      alert("Profile saved");
-    } catch (e) {
-      setError(e.message || "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Section edit toggles
-  const [editable, setEditable] = useState({
-    personal: true,
-    bio: true,
-    skills: true,
-    education: true,
-    experience: true,
-    projects: true,
-    links: true,
-  });
-  const toggleEdit = (key) =>
-    setEditable((p) => ({
-      ...p,
-      [key]: !p[key],
-    }));
-
-  // Completion % (progress circle)
+  // ✅ Completion %
   const completion = useMemo(() => {
-    let filled = 0,
-      total = 0;
+    let filled = 0;
+    let total = 0;
+
     const personalFields = [
       "firstName",
       "lastName",
@@ -185,36 +206,98 @@ function CandidateProfilePage() {
     return Math.round((filled / Math.max(1, total)) * 100);
   }, [user, bio, skills, education, experience, projects, links]);
 
+  // Skill helpers
   const addSkill = (s) => {
     const v = s.trim();
     if (v && !skills.includes(v)) setSkills((prev) => [...prev, v]);
   };
   const removeSkill = (v) => setSkills((prev) => prev.filter((x) => x !== v));
 
-  if (loading)
+  // ✏️ Section edit toggles
+  const [editable, setEditable] = useState({
+    personal: true,
+    bio: true,
+    skills: true,
+    education: true,
+    experience: true,
+    projects: true,
+    links: true,
+  });
+
+  const toggleEdit = (key) =>
+    setEditable((p) => ({
+      ...p,
+      [key]: !p[key],
+    }));
+
+  // 💾 Save profile VIA API (same route as load)
+  const save = async () => {
+    const finalEmail = (user.email || emailKey || getStoredEmail()).trim();
+
+    if (!finalEmail) {
+      setError("No user email found. Please sign in again.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const payload = {
+        user: {
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: finalEmail.toLowerCase(),
+          phone: user.phone || "",
+          dob: formatDateForInput(user.dob),
+          gender: user.gender || "",
+        },
+        candidate: {
+          headline: bio.headline || "",
+          summary: bio.summary || "",
+          skills,
+          education,
+          experience,
+          projects,
+          links,
+          completion,
+        },
+      };
+
+      const res = await fetch("/api/profile/candidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `Server returned ${res.status}`);
+      }
+
+      alert("Profile saved successfully ✅");
+    } catch (e) {
+      console.error("Save profile failed:", e);
+      setError(
+        e.message ||
+          "Internal server error while saving profile. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="bg-white rounded-xl p-8 border border-gray-200">
         <div className="text-lg font-semibold text-gray-900">Loading…</div>
       </div>
     );
+  }
 
   return (
     <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900">My Profile</h1>
-          <p className="text-lg text-gray-600 mt-2">Build your professional profile</p>
-        </div>
-        <button 
-          className="px-8 py-3 text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition"
-          onClick={save} 
-          disabled={saving}
-        >
-          {saving ? "Saving…" : "Save Profile"}
-        </button>
-      </div>
-
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-red-800 font-medium">{error}</p>
@@ -230,7 +313,6 @@ function CandidateProfilePage() {
       >
         {/* LEFT PANEL - SIDEBAR */}
         <aside className="bg-white rounded-xl border border-gray-200 p-8 h-fit sticky top-24">
-          {/* Profile Card */}
           <div className="mb-8">
             <div className="flex items-center gap-4 mb-6">
               <div
@@ -257,15 +339,12 @@ function CandidateProfilePage() {
               </div>
             </div>
 
-            {/* Progress Circle */}
             <ProfileProgress value={completion} />
             <div className="text-center mt-3">
               <div className="text-sm text-gray-600 font-medium">
                 {completion}% Complete
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Profile completeness
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Profile completeness</p>
             </div>
           </div>
 
@@ -343,7 +422,7 @@ function CandidateProfilePage() {
                 disabled={!editable.personal}
                 label="Date of Birth"
                 type="date"
-                value={user.dob}
+                value={formatDateForInput(user.dob)}
                 onChange={(v) => setUser({ ...user, dob: v })}
               />
               <Select
@@ -531,6 +610,17 @@ function CandidateProfilePage() {
               { key: "url", label: "URL" },
             ]}
           />
+
+          {/* SAVE BUTTON AT BOTTOM */}
+          <div className="flex justify-end pt-6">
+            <button
+              className="px-8 py-3 text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition disabled:opacity-60"
+              onClick={save}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save Profile"}
+            </button>
+          </div>
         </main>
       </div>
     </div>
@@ -742,9 +832,9 @@ function ListSection({
       ref={innerRef}
       className="bg-white rounded-xl border border-gray-200 p-8"
     >
-      <SectionHeader 
-        title={title} 
-        editing={!disabled} 
+      <SectionHeader
+        title={title}
+        editing={!disabled}
         onToggle={onToggle}
         showEdit={true}
       />
@@ -910,12 +1000,3 @@ function ProfileProgress({ value = 0 }) {
     </svg>
   );
 }
-
-/* Attach per-page layout */
-CandidateProfilePage.getLayout = (page) => (
-  <Layout active="profile" role="CANDIDATE">
-    {page}
-  </Layout>
-);
-
-export default CandidateProfilePage;

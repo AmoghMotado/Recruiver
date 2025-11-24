@@ -1,281 +1,352 @@
 // server/routes/mockInterview.js
+// Advanced AI-style mock interview pipeline (JSON API + Firebase Storage URL)
+
 const express = require("express");
-const router = express.Router();
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-
-const { requireAuth } = require("../middleware/auth");
+const admin = require("firebase-admin");
 const { db } = require("../lib/firebaseAdmin");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
-// ---------- Video upload setup ----------
-const uploadDir = path.join(process.cwd(), "uploads", "mock-interviews");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const router = express.Router();
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+// Very simple heuristic “AI-style” analysis using transcript + extra stats
+function analyseInterview({
+  transcript = "",
+  durationSec = 0,
+  extraStats = {},
+  eyeContactPercent = 0,
+}) {
+  const text = String(transcript || "");
+  const lower = text.toLowerCase();
+
+  // words + WPM
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const wordCount = extraStats.totalWords || words.length;
+  const minutes = Math.max(1, durationSec / 60 || 1);
+  const wpm = Math.round(wordCount / minutes);
+
+  // speaking pace buckets
+  let speakingPace;
+  if (wpm < 90) speakingPace = "slow";
+  else if (wpm <= 160) speakingPace = "normal";
+  else speakingPace = "fast";
+
+  // filler words
+  const fillerTokens = [
+    "um",
+    "uh",
+    "like",
+    "you know",
+    "basically",
+    "actually",
+    "so",
+    "well",
+  ];
+  let fillerCount = 0;
+  fillerTokens.forEach((token) => {
+    const regex = new RegExp(`\\b${token.replace(" ", "\\s+")}\\b`, "gi");
+    const matches = lower.match(regex);
+    if (matches) fillerCount += matches.length;
+  });
+  const fillersPerMin = fillerCount / minutes;
+  let fillerUsage;
+  if (fillersPerMin <= 1) fillerUsage = "low";
+  else if (fillersPerMin <= 3) fillerUsage = "medium";
+  else fillerUsage = "high";
+
+  // sentiment (very rough keyword-based)
+  const positiveWords = [
+    "good",
+    "great",
+    "excellent",
+    "confident",
+    "happy",
+    "improve",
+    "strong",
+    "success",
+    "excited",
+    "motivated",
+    "learning",
+    "growth",
+    "opportunity",
+  ];
+  const negativeWords = [
+    "bad",
+    "weak",
+    "nervous",
+    "afraid",
+    "fail",
+    "failure",
+    "difficult",
+    "problem",
+    "stress",
+    "stressed",
+    "anxious",
+  ];
+
+  let pos = 0;
+  let neg = 0;
+  words.forEach((w) => {
+    const lw = w.toLowerCase();
+    if (positiveWords.includes(lw)) pos += 1;
+    if (negativeWords.includes(lw)) neg += 1;
+  });
+
+  let sentimentScore = 50;
+  if (pos + neg > 0) {
+    const raw = (pos - neg) / (pos + neg); // -1 .. 1
+    sentimentScore = Math.max(0, Math.min(100, Math.round(50 + raw * 50)));
+  }
+
+  let sentimentSummary = "Overall neutral, professional tone.";
+  if (sentimentScore >= 75) {
+    sentimentSummary =
+      "Overall positive and confident emotional tone with good enthusiasm.";
+  } else if (sentimentScore <= 35) {
+    sentimentSummary =
+      "Tone sounds a bit negative or nervous. Try to sound more confident and optimistic.";
+  }
+
+  // eye contact score + label
+  const numericEyeContact = Number.isFinite(eyeContactPercent)
+    ? Math.max(0, Math.min(100, Math.round(eyeContactPercent)))
+    : 0;
+
+  let eyeContactLabel = "stable";
+  if (numericEyeContact < 40) eyeContactLabel = "weak";
+  else if (numericEyeContact < 70) eyeContactLabel = "variable";
+
+  // Map into 5 core scores (0–100) – simple heuristic from sentiment + pace
+  const clamp = (v) => Math.max(0, Math.min(100, Math.round(v)));
+
+  const base = sentimentScore; // 0–100
+  const appearance = clamp(60 + base * 0.2); // 60–80+
+  const language = clamp(50 + base * 0.3);
+  const confidence = clamp(45 + base * 0.4);
+  const contentDelivery =
+    speakingPace === "normal"
+      ? clamp(50 + base * 0.4)
+      : clamp(45 + base * 0.3);
+  const knowledge = clamp(50 + base * 0.25);
+
+  const scores = {
+    appearance,
+    language,
+    confidence,
+    contentDelivery,
+    knowledge,
+  };
+
+  let emotionalTone = "Neutral and calm delivery.";
+  if (sentimentScore >= 75)
+    emotionalTone = "Positive, confident and engaging delivery.";
+  else if (sentimentScore <= 35)
+    emotionalTone =
+      "Nervous or slightly negative tone; work on sounding more confident and relaxed.";
+
+  return {
+    scores,
+    sentimentScore,
+    sentimentSummary,
+    speakingPace,
+    fillerUsage,
+    eyeContactPercent: numericEyeContact,
+    eyeContactLabel,
+    emotionalTone,
+    wordCount,
+    wpm,
+    fillerCount,
+  };
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
-    )}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
-});
+/* ------------------------------------------------------------------ */
+/* POST /api/mock-interview/start                                    */
+/* Creates a lightweight interview session document (for tracking)    */
+/* ------------------------------------------------------------------ */
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if ([".webm", ".mp4", ".mov"].includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only video files are allowed"));
-    }
-  },
-});
-
-// ---------- AI analysis (stub) ----------
-
-/**
- * POST /api/mock-interview/analyze
- * Analyze a single video answer using AI
- */
 router.post(
-  "/analyze",
+  "/start",
   requireAuth,
-  upload.single("video"),
+  requireRole("CANDIDATE"),
   async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No video uploaded" });
-      }
+      const userId = req.user.id;
+      const now = new Date();
 
-      const { question, transcript } = req.body;
+      // You can later customise questions per user / role / job.
+      const defaultQuestions = [
+        "Tell me about yourself and your background.",
+        "What are your greatest strengths and how do they apply to this role?",
+        "Describe a challenging project you worked on and how you overcame obstacles.",
+        "Where do you see yourself in 3-5 years?",
+        "Why should we hire you for this position?",
+      ];
 
-      // Simulated AI analysis (replace with real API later)
-      const scores = await analyzeWithAI(
-        question,
-        transcript,
-        req.file.path
-      );
+      const docRef = await db.collection("mockInterviewSessions").add({
+        userId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "CREATED",
+        questions: defaultQuestions,
+      });
 
-      return res.json({ scores });
+      return res.status(201).json({
+        interviewId: docRef.id,
+        questions: defaultQuestions,
+      });
     } catch (err) {
-      console.error("POST /api/mock-interview/analyze error:", err);
-      return res.status(500).json({ message: "Failed to analyze video" });
+      console.error("Mock interview start error:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to start interview. Please try again." });
     }
   }
 );
 
-/**
- * AI Analysis Function (Replace with real Claude / OpenAI / other API later)
- */
-async function analyzeWithAI(question, transcript, videoPath) {
-  const wordCount = transcript ? transcript.split(" ").length : 0;
+/* ------------------------------------------------------------------ */
+/* POST /api/mock-interview/submit                                   */
+/* Client already uploaded video to Firebase Storage and sends:       */
+/* { interviewId, videoUrl, transcript, eyeContactPercent,            */
+/*   extraStats, startedAt, endedAt }                                 */
+/* ------------------------------------------------------------------ */
 
-  const baseScore = 70;
-  const lengthBonus = Math.min(15, Math.floor(wordCount / 10));
+router.post(
+  "/submit",
+  requireAuth,
+  requireRole("CANDIDATE"),
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
 
-  return {
-    appearance: baseScore + Math.floor(Math.random() * 10) + 5,
-    language: baseScore + lengthBonus + Math.floor(Math.random() * 10),
-    confidence: baseScore + Math.floor(Math.random() * 15),
-    contentDelivery:
-      baseScore + lengthBonus + Math.floor(Math.random() * 10),
-    knowledge: baseScore + Math.floor(Math.random() * 10),
-  };
-}
+      const {
+        interviewId = null,
+        videoUrl = null,
+        transcript = "",
+        eyeContactPercent = 0,
+        extraStats = {},
+        startedAt = null,
+        endedAt = null,
+      } = req.body || {};
 
-// ---------- Summary / attempts (Firestore) ----------
+      // duration – prefer explicit extraStats.totalSeconds, else derive
+      let durationSec = 0;
+      if (
+        extraStats &&
+        typeof extraStats.totalSeconds === "number" &&
+        extraStats.totalSeconds > 0
+      ) {
+        durationSec = extraStats.totalSeconds;
+      } else if (startedAt && endedAt) {
+        const start = new Date(startedAt);
+        const end = new Date(endedAt);
+        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+          durationSec = Math.max(0, Math.round((end - start) / 1000));
+        }
+      }
 
-/**
- * GET /api/mock-interview/summary
- * Aggregated summary for current user
- */
-router.get("/summary", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
+      // Run local “AI-style” analysis
+      const analysis = analyseInterview({
+        transcript,
+        durationSec,
+        extraStats,
+        eyeContactPercent,
+      });
 
-    const snap = await db
-      .collection("mockInterviewAttempts")
-      .where("userId", "==", userId)
-      .orderBy("takenAt", "desc")
-      .limit(50)
-      .get();
+      const core = analysis.scores;
+      const overall =
+        (core.appearance +
+          core.language +
+          core.confidence +
+          core.contentDelivery +
+          core.knowledge) /
+        5;
 
-    if (snap.empty) {
-      return res.json({
-        totalAttempts: 0,
-        averageScore: 0,
-        top10Average: 0,
-        improvementRate: 0,
-        latestScore: null,
-        latest: null,
-        skills: {
-          appearance: 0,
-          language: 0,
-          confidence: 0,
-          contentDelivery: 0,
-          knowledge: 0,
-        },
+      // Build Firestore document
+      const attemptDoc = {
+        userId,
+        interviewId,
+        videoUrl: videoUrl || null,
+        transcript: transcript || "",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        startedAt: startedAt ? new Date(startedAt) : null,
+        endedAt: endedAt ? new Date(endedAt) : null,
+        durationSec,
+
+        // Core 5 scores
+        appearance: core.appearance,
+        language: core.language,
+        confidence: core.confidence,
+        contentDelivery: core.contentDelivery,
+        knowledge: core.knowledge,
+        overallScore: Math.round(overall),
+
+        // Analysis details
+        sentimentScore: analysis.sentimentScore,
+        sentimentSummary: analysis.sentimentSummary,
+        speakingPace: analysis.speakingPace,
+        fillerUsage: analysis.fillerUsage,
+        eyeContactPercent: analysis.eyeContactPercent,
+        eyeContactLabel: analysis.eyeContactLabel,
+        emotionalTone: analysis.emotionalTone,
+        wordCount: analysis.wordCount,
+        wpm: analysis.wpm,
+        fillerCount: analysis.fillerCount,
+
+        // raw stats from client
+        eyeContactFrames: extraStats.eyeContactFrames || null,
+        totalFrames: extraStats.totalFrames || null,
+      };
+
+      const ref = await db.collection("mockInterviewAttempts").add(attemptDoc);
+      const snap = await ref.get();
+
+      return res.status(201).json({
+        success: true,
+        attempt: { id: ref.id, ...snap.data() },
+      });
+    } catch (err) {
+      console.error("Mock interview submit error:", err);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to process interview. Please try again.",
+        details: err.message,
       });
     }
-
-    const attempts = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-
-    const totalAttempts = attempts.length;
-    const scores = attempts.map((a) => Number(a.score || a.overallScore || 0));
-    const averageScore =
-      scores.reduce((sum, s) => sum + s, 0) / Math.max(1, scores.length);
-
-    const top10 = attempts.slice(0, 10);
-    const top10Avg =
-      top10.reduce(
-        (sum, a) => sum + Number(a.score || a.overallScore || 0),
-        0
-      ) / Math.max(1, top10.length);
-
-    const latest = attempts[0];
-    const latestScore = Number(latest.score || latest.overallScore || 0);
-
-    const oldest = attempts[attempts.length - 1];
-    const oldestScore = Number(oldest.score || oldest.overallScore || 0);
-    const improvementRate = latestScore - oldestScore;
-
-    const skills = latest.details || latest.scores || {
-      appearance: 0,
-      language: 0,
-      confidence: 0,
-      contentDelivery: 0,
-      knowledge: 0,
-    };
-
-    return res.json({
-      totalAttempts,
-      averageScore,
-      top10Average: top10Avg,
-      improvementRate,
-      latestScore,
-      latest,
-      skills,
-    });
-  } catch (err) {
-    console.error("GET /api/mock-interview/summary error:", err);
-    return res.status(500).json({ message: "Failed to load summary" });
   }
-});
+);
 
-/**
- * GET /api/mock-interview/attempts
- * Returns latest attempts for the user
- */
-router.get("/attempts", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
+/* ------------------------------------------------------------------ */
+/* (Optional) GET /api/mock-interview/latest – last attempt for user  */
+/* ------------------------------------------------------------------ */
 
-    const snap = await db
-      .collection("mockInterviewAttempts")
-      .where("userId", "==", userId)
-      .orderBy("takenAt", "desc")
-      .limit(50)
-      .get();
-
-    const attempts = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-
-    return res.json({ attempts });
-  } catch (err) {
-    console.error("GET /api/mock-interview/attempts error:", err);
-    return res.status(500).json({ message: "Failed to load attempts" });
-  }
-});
-
-/**
- * POST /api/mock-interview/attempts
- * body: { appearance, language, confidence, contentDelivery, knowledge, jobId? }
- * Persists a mock interview attempt
- */
-router.post("/attempts", requireAuth, async (req, res) => {
-  try {
-    const {
-      appearance = 0,
-      language = 0,
-      confidence = 0,
-      contentDelivery = 0,
-      knowledge = 0,
-      jobId,
-    } = req.body || {};
-
-    const numeric = {
-      appearance: Number(appearance),
-      language: Number(language),
-      confidence: Number(confidence),
-      contentDelivery: Number(contentDelivery),
-      knowledge: Number(knowledge),
-    };
-
-    const avg =
-      (numeric.appearance +
-        numeric.language +
-        numeric.confidence +
-        numeric.contentDelivery +
-        numeric.knowledge) / 5;
-
-    const score = Math.round(avg);
-    const now = new Date();
-
-    const docRef = await db.collection("mockInterviewAttempts").add({
-      userId: req.user.id,
-      jobId: jobId || null,
-      score,
-      details: numeric,
-      takenAt: now,
-    });
-
-    // Optional: attach to applications if jobId provided
-    if (jobId) {
-      const appsRef = db.collection("applications");
-      const existingSnap = await appsRef
-        .where("jobId", "==", jobId)
-        .where("studentId", "==", req.user.id)
+router.get(
+  "/latest",
+  requireAuth,
+  requireRole("CANDIDATE"),
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const snap = await db
+        .collection("mockInterviewAttempts")
+        .where("userId", "==", userId)
+        .orderBy("createdAt", "desc")
         .limit(1)
         .get();
 
-      if (!existingSnap.empty) {
-        const appRef = existingSnap.docs[0].ref;
-        await appRef.set(
-          {
-            interviewScore: score,
-            status: "ROUND3_DONE",
-            updatedAt: now,
-          },
-          { merge: true }
-        );
+      if (snap.empty) {
+        return res.json({ attempt: null });
       }
+      const doc = snap.docs[0];
+      return res.json({ attempt: { id: doc.id, ...doc.data() } });
+    } catch (err) {
+      console.error("Mock interview latest error:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to load latest attempt." });
     }
-
-    const attempt = {
-      id: docRef.id,
-      userId: req.user.id,
-      score,
-      details: numeric,
-      takenAt: now,
-      jobId: jobId || null,
-    };
-
-    return res.status(201).json({ attempt });
-  } catch (err) {
-    console.error("POST /api/mock-interview/attempts error:", err);
-    return res.status(500).json({ message: "Failed to save attempt" });
   }
-});
+);
 
 module.exports = router;

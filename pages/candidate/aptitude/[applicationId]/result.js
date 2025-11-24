@@ -32,7 +32,7 @@ function AptitudeResult() {
 
   if (!result) {
     return (
-      <Layout role="CANDIDATE">
+      <Layout role="CANDIDATE" active="job-profiles">
         <div className="max-w-4xl mx-auto py-10 px-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -75,7 +75,7 @@ function AptitudeResult() {
       : endReason;
 
   return (
-    <Layout role="CANDIDATE">
+    <Layout role="CANDIDATE" active="job-profiles">
       <div className="max-w-4xl mx-auto py-10 px-4 space-y-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">

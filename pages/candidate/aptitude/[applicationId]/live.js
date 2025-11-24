@@ -1,8 +1,8 @@
-// pages/candidate/aptitude/live.js
+// pages/candidate/aptitude/[applicationId]/live.js
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import Layout from "../../../components/Layout";
-import ProctoringCamera from "../../../components/proctoring/ProctoringCamera";
+import Layout from "../../../../components/Layout";
+import ProctoringCamera from "../../../../components/proctoring/ProctoringCamera";
 
 const STATUS = {
   UNVISITED: "unvisited",
@@ -11,9 +11,9 @@ const STATUS = {
   SKIPPED: "skipped",
 };
 
-// must match mock-test-live
 const MAX_VIOLATIONS = 5;
 const STORAGE_KEY = "aptitudeTest";
+const STORAGE_RESULT_KEY = "aptitudeTest:result";
 
 function toSafeJSON(value, fallback) {
   try {
@@ -39,81 +39,98 @@ function AptitudeLiveInner() {
   const [jobMeta, setJobMeta] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load questions from server OR from previous run (if any)
+  /* =========================================================
+     Load live questions from server
+     ========================================================= */
   useEffect(() => {
     if (!applicationId) return;
 
     const load = async () => {
       setLoading(true);
+
       try {
-        const stored = toSafeJSON(
-          localStorage.getItem(`${STORAGE_KEY}.questions`) || "null",
-          null
+        // Always clear stale LS for safety
+        localStorage.removeItem(`${STORAGE_KEY}.questions`);
+
+        const res = await fetch(
+          `/api/aptitude/test?applicationId=${encodeURIComponent(
+            applicationId
+          )}`,
+          { credentials: "include" }
         );
-        const storedAns = toSafeJSON(
-          localStorage.getItem(`${STORAGE_KEY}.answers`) || "{}",
-          {}
-        );
-        const storedStatus = toSafeJSON(
-          localStorage.getItem(`${STORAGE_KEY}.status`) || "[]",
-          []
-        );
-        const storedTime = parseInt(
-          localStorage.getItem(`${STORAGE_KEY}.timeLeft`) || "3600",
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data?.message || "Failed to load aptitude test");
+        }
+
+        const qs = data.questions || [];
+        const meta = data.meta || null;
+
+        setQuestions(qs);
+        setJobMeta(meta);
+
+        /* --------------------------------------------
+           RESTORE PROGRESS SAFELY
+           -------------------------------------------- */
+
+        const defaultTime =
+          meta?.durationMinutes && meta.durationMinutes > 0
+            ? meta.durationMinutes * 60
+            : 60 * 60;
+
+        // Restore time safely
+        let storedTime = parseInt(
+          localStorage.getItem(`${STORAGE_KEY}.timeLeft`) || "",
           10
         );
-        const storedViolations = toSafeJSON(
+
+        if (
+          Number.isNaN(storedTime) ||
+          storedTime <= 0 ||
+          storedTime > defaultTime
+        ) {
+          storedTime = defaultTime;
+        }
+
+        // Restore violations safely
+        let storedViolations = toSafeJSON(
           localStorage.getItem(`${STORAGE_KEY}.violations`) || "[]",
           []
         );
 
-        let qs = stored;
-        let meta = null;
+        if (!Array.isArray(storedViolations)) storedViolations = [];
 
-        if (!Array.isArray(qs) || qs.length === 0) {
-          const res = await fetch(
-            `/api/aptitude/test?applicationId=${encodeURIComponent(
-              applicationId
-            )}`
-          );
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            throw new Error(data?.message || "Failed to load aptitude test");
-          }
-          qs = data.questions || [];
-          meta = data.meta || null;
-
-          localStorage.setItem(
-            `${STORAGE_KEY}.questions`,
-            JSON.stringify(qs)
-          );
-          localStorage.setItem(
-            `${STORAGE_KEY}.jobMeta`,
-            JSON.stringify(meta)
-          );
-        } else {
-          meta = toSafeJSON(
-            localStorage.getItem(`${STORAGE_KEY}.jobMeta`) || "null",
-            null
-          );
+        if (storedViolations.length >= MAX_VIOLATIONS) {
+          storedViolations = [];
         }
 
-        setQuestions(qs);
-        setJobMeta(meta);
+        const storedAns = toSafeJSON(
+          localStorage.getItem(`${STORAGE_KEY}.answers`) || "{}",
+          {}
+        );
+
+        const storedStatus = toSafeJSON(
+          localStorage.getItem(`${STORAGE_KEY}.status`) || "[]",
+          []
+        );
+
         setAnswers(storedAns || {});
+
         if (Array.isArray(storedStatus) && storedStatus.length === qs.length) {
           setStatus(storedStatus);
         } else {
           setStatus(Array(qs.length).fill(STATUS.UNVISITED));
         }
 
-        setSecondsLeft(Number.isNaN(storedTime) ? 3600 : storedTime);
-        if (Array.isArray(storedViolations)) {
-          setViolations(storedViolations);
-          setViolationCount(storedViolations.length);
-        }
+        setSecondsLeft(storedTime);
+        setViolations(storedViolations);
+        setViolationCount(storedViolations.length);
       } catch (err) {
         alert(err.message || "Failed to load test");
+        setQuestions([]);
+        setStatus([]);
       } finally {
         setLoading(false);
       }
@@ -122,7 +139,9 @@ function AptitudeLiveInner() {
     load();
   }, [applicationId]);
 
-  // Countdown timer
+  /* =========================================================
+     Countdown timer (safe)
+     ========================================================= */
   useEffect(() => {
     if (!questions.length) return;
 
@@ -138,7 +157,6 @@ function AptitudeLiveInner() {
     }, 1000);
 
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.length]);
 
   // Persist time
@@ -148,7 +166,9 @@ function AptitudeLiveInner() {
     } catch {}
   }, [secondsLeft]);
 
-  // unified violation logger (same as mock)
+  /* =========================================================
+     Proctoring
+     ========================================================= */
   const registerViolation = (source, reason) => {
     setViolations((prev) => {
       const updated = [...prev, { ts: Date.now(), source, reason }];
@@ -163,7 +183,7 @@ function AptitudeLiveInner() {
     setViolationCount((prev) => prev + 1);
   };
 
-  // Anti-cheat: tab / window focus (same as mock)
+  // Visibility & blur
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
@@ -181,16 +201,20 @@ function AptitudeLiveInner() {
       window.removeEventListener("blur", handleBlur);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-submit on violation limit
+  // Auto-submit on max violations (safe)
   useEffect(() => {
-    if (violationCount >= MAX_VIOLATIONS && !hasSubmittedRef.current) {
+    if (
+      violationCount >= MAX_VIOLATIONS &&
+      !hasSubmittedRef.current &&
+      questions.length > 0
+    ) {
       handleSubmit(true, "VIOLATION_LIMIT");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [violationCount]);
+  }, [violationCount, questions.length]);
+
+  /* ========================================================= */
 
   const question = useMemo(
     () => (questions.length ? questions[idx] : null),
@@ -212,10 +236,7 @@ function AptitudeLiveInner() {
         copy[qIdx] = newState;
       }
       try {
-        localStorage.setItem(
-          `${STORAGE_KEY}.status`,
-          JSON.stringify(copy)
-        );
+        localStorage.setItem(`${STORAGE_KEY}.status`, JSON.stringify(copy));
       } catch {}
       return copy;
     });
@@ -225,12 +246,11 @@ function AptitudeLiveInner() {
     if (!question) return;
     const newAns = { ...answers, [question.id]: optIndex };
     setAnswers(newAns);
+
     try {
-      localStorage.setItem(
-        `${STORAGE_KEY}.answers`,
-        JSON.stringify(newAns)
-      );
+      localStorage.setItem(`${STORAGE_KEY}.answers`, JSON.stringify(newAns));
     } catch {}
+
     updateStatus(idx, STATUS.ATTEMPTED);
   };
 
@@ -256,85 +276,101 @@ function AptitudeLiveInner() {
     goNext();
   };
 
+  /* =========================================================
+     Submit
+     ========================================================= */
   const handleSubmit = async (auto = false, autoReason = null) => {
     if (!questions.length || !applicationId) return;
     if (hasSubmittedRef.current) return;
+
     hasSubmittedRef.current = true;
     setSubmitting(true);
 
-    let correct = 0;
-    const byCategory = {};
-
-    questions.forEach((q) => {
-      if (!byCategory[q.category]) {
-        byCategory[q.category] = { total: 0, correct: 0 };
-      }
-      byCategory[q.category].total += 1;
-      const ans = answers[q.id];
-      if (typeof ans === "number" && q.correct === ans) {
-        correct += 1;
-        byCategory[q.category].correct += 1;
-      }
-    });
-
-    const total = questions.length;
-    const pct = Math.round((correct / total) * 100);
+    const totalQuestions = questions.length;
     const attempted = Object.keys(answers).length;
     const skipped = status.filter((s) => s === STATUS.SKIPPED).length;
 
-    const summary = {
-      total,
-      correct,
-      attempted,
-      skipped,
-      autoSubmitted: auto,
-      autoReason,
-      byCategory,
-      violations,
-    };
+    const endReason =
+      autoReason === "TIME_UP"
+        ? "TIME_UP"
+        : autoReason === "VIOLATION_LIMIT"
+        ? "VIOLATION_LIMIT"
+        : "MANUAL";
 
     try {
-      // persist locally
+      const payload = {
+        applicationId,
+        answers: Object.entries(answers).map(([questionId, optionIndex]) => ({
+          questionId,
+          optionIndex,
+        })),
+        proctoring: {
+          totalViolations: violations.length,
+          autoSubmitted: autoReason === "VIOLATION_LIMIT",
+        },
+        endReason,
+      };
+
+      const res = await fetch("/api/aptitude/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to submit aptitude test");
+      }
+
+      const finalScore = typeof data.score === "number" ? data.score : 0;
+      const summary = data.summary || {};
+
+      const resultPayload = {
+        applicationId,
+        score: finalScore,
+        totalQuestions: summary.totalQuestions ?? totalQuestions,
+        correct: summary.correct ?? 0,
+        incorrect: summary.incorrect ?? 0,
+        attempted: summary.attempted ?? attempted,
+        skipped: summary.skipped ?? skipped,
+        violationCount: violations.length,
+        endReason,
+      };
+
+      // Save result to LS
       try {
         localStorage.setItem(
-          `${STORAGE_KEY}.score`,
-          String(pct)
+          STORAGE_RESULT_KEY,
+          JSON.stringify(resultPayload)
         );
         localStorage.setItem(
           `${STORAGE_KEY}.summary`,
           JSON.stringify(summary)
         );
-        localStorage.removeItem(`${STORAGE_KEY}.timeLeft`);
-      } catch {}
 
-      // send to backend → update application (score + aptitudeSummary)
-      const res = await fetch("/api/aptitude/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          applicationId,
-          score: pct,
-          summary,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.message || "Failed to submit aptitude test");
-      }
+        // 🔥 IMPORTANT: Clear all old progress
+        localStorage.removeItem(`${STORAGE_KEY}.timeLeft`);
+        localStorage.removeItem(`${STORAGE_KEY}.answers`);
+        localStorage.removeItem(`${STORAGE_KEY}.status`);
+        localStorage.removeItem(`${STORAGE_KEY}.violations`);
+      } catch {}
     } catch (err) {
-      alert(err.message || "Failed to submit test. Your score may not be saved.");
+      alert(err.message || "Failed to submit test");
     } finally {
       setSubmitting(false);
       router.replace(
-        `/candidate/aptitude/result?applicationId=${encodeURIComponent(
+        `/candidate/aptitude/${encodeURIComponent(
           applicationId
-        )}`
+        )}/result`
       );
     }
   };
 
-  // mark first question visited
+  /* =========================================================
+     Initial VISITED mark
+     ========================================================= */
   useEffect(() => {
     if (
       questions.length &&
@@ -343,8 +379,9 @@ function AptitudeLiveInner() {
     ) {
       updateStatus(0, STATUS.VISITED);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.length, status.length]);
+
+  /* ========================================================= */
 
   if (loading || !question) {
     return (
@@ -360,10 +397,13 @@ function AptitudeLiveInner() {
 
   const selected = answers[question.id];
 
+  /* =========================================================
+     UI
+     ========================================================= */
   return (
     <Layout role="CANDIDATE" active="job-profiles">
       <div className="space-y-6 pb-8">
-        {/* Header + proctoring */}
+        {/* Header */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
@@ -379,8 +419,11 @@ function AptitudeLiveInner() {
             )}
             <p className="text-sm text-gray-600">
               Questions:{" "}
-              <span className="font-semibold">{questions.length}</span> | Time:{" "}
-              <span className="font-semibold">60 minutes</span>
+              <span className="font-semibold">{questions.length}</span> |
+              Time:{" "}
+              <span className="font-semibold">
+                {jobMeta?.durationMinutes || 60} minutes
+              </span>
             </p>
           </div>
 
@@ -421,14 +464,13 @@ function AptitudeLiveInner() {
             <p className="text-sm text-yellow-900">
               ⚠️ <strong>Proctoring Notice:</strong> We detected{" "}
               <span className="font-semibold">{violationCount}</span>{" "}
-              proctoring violation
-              {violationCount > 1 ? "s" : ""}. Repeated violations may lead to
-              auto-submission of your test.
+              violation{violationCount > 1 ? "s" : ""}. Repeated violations may
+              auto-submit your test.
             </p>
           </div>
         )}
 
-        {/* Question */}
+        {/* Question Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-8">
           <div className="flex items-start justify-between gap-8">
             <div>
@@ -469,7 +511,7 @@ function AptitudeLiveInner() {
             <button
               onClick={goPrev}
               disabled={idx === 0}
-              className="px-6 py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-6 py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-700 disabled:opacity-50 hover:bg-gray-50"
             >
               ← Previous
             </button>
@@ -477,14 +519,15 @@ function AptitudeLiveInner() {
             <div className="flex gap-3">
               <button
                 onClick={skip}
-                className="px-6 py-3 rounded-lg font-bold border-2 border-orange-300 text-orange-700 hover:bg-orange-50 transition-all"
+                className="px-6 py-3 rounded-lg font-bold border-2 border-orange-300 text-orange-700 hover:bg-orange-50"
               >
                 ⊘ Skip
               </button>
+
               {idx < questions.length - 1 ? (
                 <button
                   onClick={goNext}
-                  className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:shadow-lg transition-all"
+                  className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:shadow-lg"
                 >
                   Next →
                 </button>
@@ -492,7 +535,7 @@ function AptitudeLiveInner() {
                 <button
                   disabled={submitting}
                   onClick={() => handleSubmit(false, "MANUAL_SUBMIT")}
-                  className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg transition-all disabled:opacity-60"
+                  className="px-6 py-3 rounded-lg font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg disabled:opacity-60"
                 >
                   {submitting ? "Submitting…" : "✓ Submit"}
                 </button>

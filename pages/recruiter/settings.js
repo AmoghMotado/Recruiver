@@ -1,4 +1,6 @@
-// pages/recruiter/settings.js
+// ============================================
+// FILE 5: pages/recruiter/settings.js
+// ============================================
 import { useEffect, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -152,21 +154,15 @@ function Settings() {
   };
 
   return (
-    <div className="space-y-12">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Settings ⚙️</h1>
-          <p className="text-lg text-gray-600">
-            Configure notifications, automation, and system preferences
-          </p>
-        </div>
-        {saved && (
-          <div className="flex items-center gap-2 text-emerald-600 font-semibold">
-            <span>✓</span> Saved
+    <div className="space-y-8">
+      {/* Header - Saved indicator only */}
+      {saved && (
+        <div className="flex justify-end">
+          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-200">
+            <span>✔</span> Saved
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* LEFT COLUMN (2 cols) */}

@@ -6,7 +6,8 @@ export default function JobPostingsTable({
   onAddJob,
   onEditJob,
   onDeleteJob,
-  onConfigureAptitude, // ✅ NEW PROP
+  onConfigureAptitude = () => {},
+  onConfigureInterview = () => {}, // ✅ NEW PROP
 }) {
   if (loading) {
     return (
@@ -121,6 +122,7 @@ export default function JobPostingsTable({
                     <a
                       href={job.jdFilePath}
                       target="_blank"
+                      rel="noreferrer"
                       className="text-sm font-semibold text-indigo-600 hover:text-indigo-800"
                     >
                       View JD
@@ -149,7 +151,6 @@ export default function JobPostingsTable({
                 {/* ACTIONS */}
                 <td className="px-8 py-4">
                   <div className="flex items-center justify-end gap-2">
-
                     {/* ✏️ Edit */}
                     <button
                       onClick={() => onEditJob(job)}
@@ -159,13 +160,22 @@ export default function JobPostingsTable({
                       <span className="text-lg">✏️</span>
                     </button>
 
-                    {/* 🧠 Configure Aptitude Test — NEW */}
+                    {/* 🧠 Configure Aptitude Test */}
                     <button
                       onClick={() => onConfigureAptitude(job)}
                       className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-200 transition-all"
                       title="Configure Aptitude Test"
                     >
-                      Aptitude Test ⚙️
+                      Aptitude ⚙️
+                    </button>
+
+                    {/* 🎥 Configure Video Interview – NEW */}
+                    <button
+                      onClick={() => onConfigureInterview(job)}
+                      className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold hover:bg-amber-200 transition-all"
+                      title="Configure AI Video Interview"
+                    >
+                      Interview ⚙️
                     </button>
 
                     {/* 🗑️ Delete */}
@@ -176,7 +186,6 @@ export default function JobPostingsTable({
                     >
                       <span className="text-lg">🗑️</span>
                     </button>
-
                   </div>
                 </td>
               </tr>

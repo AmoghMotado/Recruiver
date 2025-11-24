@@ -1,5 +1,5 @@
 // pages/recruiter/aptitude/[jobId].js
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/router";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -9,6 +9,7 @@ function emptyQuestion() {
     text: "",
     options: ["", "", "", ""],
     correctIndex: 0,
+    // kept for backward compatibility, but not shown in UI
     category: "",
   };
 }
@@ -21,38 +22,12 @@ function formatTime(date) {
   });
 }
 
-function formatCategoryLabel(cat) {
-  if (!cat) return "General";
-  const c = cat.toLowerCase();
-  if (c === "quant") return "Quantitative Aptitude";
-  if (c === "logical") return "Logical Reasoning";
-  if (c === "verbal") return "Verbal / Communication";
-  if (c === "programming") return "Programming / Coding Concepts";
-  return cat;
-}
-
-// Normalize arbitrary recruiter input into canonical category keys
-function normalizeCategory(raw) {
-  if (!raw) return "";
-  const c = raw.trim().toLowerCase();
-
-  if (c.startsWith("quant")) return "quant";
-  if (c.startsWith("logical") || c.startsWith("reason")) return "logical";
-  if (c.startsWith("verbal") || c.includes("communication")) return "verbal";
-  if (c.startsWith("prog") || c.includes("coding") || c.includes("tech"))
-    return "programming";
-
-  // allow custom buckets if needed, but Round-2 UI will treat them as-is
-  return raw.trim();
-}
-
 export default function AptitudeEditorPage() {
   const router = useRouter();
   const { jobId } = router.query;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   const [jobMeta, setJobMeta] = useState(null);
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -145,7 +120,7 @@ export default function AptitudeEditorPage() {
     setQuestions((prev) => {
       const copy = [...prev];
       const q = { ...copy[index] };
-      if (field === "text" || field === "category" || field === "id") {
+      if (field === "text" || field === "id") {
         q[field] = value;
       }
       copy[index] = q;
@@ -216,7 +191,7 @@ export default function AptitudeEditorPage() {
         q.correctIndex >= options.length ||
         !options[q.correctIndex]
       ) {
-        return `Question ${i + 1} has an invalid correct option.`;
+        return `Question ${i + 1} must have a valid correct answer selected.`;
       }
     }
     return "";
@@ -243,8 +218,7 @@ export default function AptitudeEditorPage() {
         text: q.text,
         options: (q.options || []).slice(0, 4),
         correctIndex: q.correctIndex,
-        // normalize for Round-2 analytics + candidate UI
-        category: normalizeCategory(q.category),
+        category: q.category || "",
       })),
     };
 
@@ -276,82 +250,16 @@ export default function AptitudeEditorPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // Import from Mock Test
-  // ---------------------------------------------------------------------------
-  const handleImportFromMock = async () => {
-    if (
-      !window.confirm(
-        "Import questions from the Mock Test bank? This will replace the current questions in this editor."
-      )
-    ) {
-      return;
-    }
-
-    setImporting(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      // Sync with mock test categories: quant, logical, verbal, programming
-      const topics = [
-        { key: "quant", label: "Quantitative Aptitude" },
-        { key: "logical", label: "Logical Reasoning" },
-        { key: "verbal", label: "Verbal / Communication" },
-        { key: "programming", label: "Programming / Coding Concepts" },
-      ];
-
-      const perTopic = 10;
-      const allQuestions = [];
-
-      for (const { key, label } of topics) {
-        const res = await fetch(
-          `/api/mock/questions?topic=${encodeURIComponent(
-            key
-          )}&count=${perTopic}`,
-          { credentials: "include" }
-        );
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(
-            data.message ||
-              `Failed to fetch ${label} questions from mock test.`
-          );
-        }
-
-        const qs = (data.questions || []).map((q, idx) => ({
-          id: q.id || `${key}-${idx}`,
-          text: q.q || "",
-          options: q.options || ["", "", "", ""],
-          correctIndex: typeof q.answer === "number" ? q.answer : 0,
-          category: key, // already canonical
-        }));
-
-        allQuestions.push(...qs);
-      }
-
-      if (!allQuestions.length) {
-        throw new Error("Mock test bank did not return any questions.");
-      }
-
-      setQuestions(allQuestions);
-      setDurationMinutes(60);
-      setIsDirty(true);
-      setSuccess(
-        "Imported questions from mock test. Review them and click Save Aptitude Test."
-      );
-    } catch (e) {
-      console.error("Import from mock error:", e);
-      setError(e.message || "Failed to import from mock test");
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  // ---------------------------------------------------------------------------
   // Preview
   // ---------------------------------------------------------------------------
   const handleOpenPreview = () => {
     if (!questions.length) return;
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      setSuccess("");
+      return;
+    }
     setPreviewOpen(true);
   };
 
@@ -359,57 +267,65 @@ export default function AptitudeEditorPage() {
     router.push("/recruiter/job-profiles");
   };
 
-  const disableSave = saving || importing || !questions.length || !!validate();
+  const disableSave = saving || !questions.length || !!validate();
+  const canPreview = useMemo(
+    () => !loading && questions.length > 0 && !validate(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loading, questions, durationMinutes]
+  );
 
   return (
     <DashboardLayout role="RECRUITER" active="job-profiles">
-      <div className="max-w-6xl mx-auto py-8 px-4 space-y-6">
+      {/* reduced horizontal padding & more vertical breathing room */}
+      <div className="max-w-7xl mx-auto py-10 px-2 md:px-6 lg:px-8 space-y-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-indigo-500">
+              Round 2 · Aptitude Test
+            </p>
+            <h1 className="text-3xl md:text-4xl font-semibold text-gray-900">
               Aptitude Test Editor
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Configure the Round 2 aptitude test for this job. Candidates
-              shortlisted for this role will take this test under strict
-              proctoring.
+            <p className="text-base text-gray-500 max-w-3xl leading-relaxed">
+              Design a structured, auto-graded aptitude test for this role.
+              Candidates shortlisted from Round 1 will take this test under
+              AI-based proctoring.
             </p>
             {jobMeta && (
-              <p className="text-sm text-indigo-700 mt-2 font-medium">
-                {jobMeta.title} · {jobMeta.company}
-              </p>
+              <div className="inline-flex items-center rounded-full bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700">
+                <span className="truncate">
+                  {jobMeta.title} · {jobMeta.company}
+                </span>
+              </div>
             )}
           </div>
 
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-2">
               {isDirty && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200">
+                <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200">
                   Unsaved changes
                 </span>
               )}
               {lastSavedAt && !isDirty && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+                <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
                   Saved · {formatTime(lastSavedAt)}
                 </span>
               )}
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleBack}
-                className="px-4 py-2 rounded-full border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                ← Back to Job Profiles
-              </button>
-            </div>
+            <button
+              onClick={handleBack}
+              className="px-5 py-2.5 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              ← Back to Job Profiles
+            </button>
           </div>
         </div>
 
         {/* Alerts */}
         {!loading && (error || success) && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-xl px-4 py-3">
                 {error}
@@ -423,218 +339,277 @@ export default function AptitudeEditorPage() {
           </div>
         )}
 
-        {/* Main Editor Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-          {loading ? (
-            <div className="py-8 text-sm text-gray-500">
-              Loading aptitude config...
-            </div>
-          ) : (
-            <>
-              {/* Top controls row */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-end gap-4">
+        {/* Main layout: left editor, right summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.6fr)_minmax(0,1.2fr)] gap-6 items-start">
+          {/* Left: Question editor */}
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-6">
+            {loading ? (
+              <div className="py-20 text-base text-gray-500 text-center">
+                Loading aptitude config...
+              </div>
+            ) : (
+              <>
+                {/* Duration + primary actions */}
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+                  <div className="flex items-end gap-4">
+                    <div>
+                      <label className="block text-base font-medium text-gray-800 mb-1.5">
+                        Test Duration (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={180}
+                        value={durationMinutes}
+                        onChange={(e) =>
+                          handleDurationChange(e.target.value)
+                        }
+                        className="w-44 px-4 py-3 rounded-xl border border-gray-200 text-lg font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        Default is 60 minutes. Adjust based on difficulty.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleOpenPreview}
+                      disabled={!canPreview}
+                      className="px-5 py-2.5 rounded-full border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      Preview Candidate View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={disableSave}
+                      className="inline-flex items-center px-7 py-3 rounded-full bg-indigo-600 text-white text-sm md:text-base font-semibold shadow-sm hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {saving ? "Saving..." : "Save Aptitude Test"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Questions header */}
+                <div className="flex items-center justify-between mt-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Test Duration (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      min={5}
-                      max={180}
-                      value={durationMinutes}
-                      onChange={(e) => handleDurationChange(e.target.value)}
-                      className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      Default is 60 minutes. Set according to difficulty.
+                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-[0.22em]">
+                      Questions
+                    </h2>
+                    <p className="text-sm md:text-base text-gray-500">
+                      {questions.length} question
+                      {questions.length !== 1 ? "s" : ""} configured
                     </p>
                   </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleImportFromMock}
-                    disabled={importing || saving}
-                    className="px-4 py-2 rounded-full border border-purple-200 bg-purple-50 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={addQuestion}
+                    className="inline-flex items-center px-5 py-2.5 rounded-full bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100"
                   >
-                    {importing ? "Importing..." : "Duplicate from Mock Test"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleOpenPreview}
-                    disabled={!questions.length}
-                    className="px-4 py-2 rounded-full border border-indigo-200 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    Preview Test
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={disableSave}
-                    className="inline-flex items-center px-5 py-2 rounded-full bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {saving ? "Saving..." : "Save Aptitude Test"}
+                    + Add Question
                   </button>
                 </div>
-              </div>
 
-              {/* Questions */}
-              <div className="flex items-center justify-between mt-4">
-                <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
-                  Questions ({questions.length})
-                </h2>
-                <button
-                  type="button"
-                  onClick={addQuestion}
-                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"
-                >
-                  + Add Question
-                </button>
-              </div>
+                {/* Questions list */}
+                <div className="space-y-5 max-h-[700px] overflow-y-auto pr-1">
+                  {questions.map((q, index) => (
+                    <div
+                      key={index}
+                      className="border border-gray-100 rounded-2xl md:rounded-3xl p-5 md:p-6 bg-gray-50/70"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-indigo-600 text-white text-sm font-semibold">
+                            {index + 1}
+                          </span>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                              Question {index + 1}
+                            </p>
+                            <p className="text-[12px] text-gray-400">
+                              Mark one option as the correct answer. This will
+                              be used for auto-scoring.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeQuestion(index)}
+                          disabled={questions.length === 1}
+                          className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Remove
+                        </button>
+                      </div>
 
-              <div className="space-y-4 max-h-[540px] overflow-y-auto pr-1">
-                {questions.map((q, index) => (
-                  <div
-                    key={index}
-                    className="border border-gray-100 rounded-2xl p-4 bg-gray-50/70"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                          Question {index + 1}
-                        </p>
-                        {q.category && (
-                          <p className="text-[11px] text-indigo-600 mt-0.5">
-                            {formatCategoryLabel(normalizeCategory(q.category))}
-                          </p>
+                      <textarea
+                        className="w-full text-base md:text-lg border border-gray-200 rounded-2xl px-4 py-3.5 mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        rows={3}
+                        placeholder="Type the question here..."
+                        value={q.text}
+                        onChange={(e) =>
+                          updateQuestionField(index, "text", e.target.value)
+                        }
+                      />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {(q.options || ["", "", "", ""]).map(
+                          (opt, optIdx) => {
+                            const isCorrect = q.correctIndex === optIdx;
+                            const optionLabel =
+                              ["A", "B", "C", "D"][optIdx] || "";
+                            return (
+                              <button
+                                key={optIdx}
+                                type="button"
+                                onClick={() => setCorrectIndex(index, optIdx)}
+                                className={`flex items-center gap-3 w-full text-left rounded-2xl border px-4 py-3.5 transition ${
+                                  isCorrect
+                                    ? "border-emerald-500 bg-emerald-50/70 shadow-sm"
+                                    : "border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40"
+                                }`}
+                              >
+                                <div className="flex items-center justify-center">
+                                  <span
+                                    className={`h-6 w-6 rounded-full border flex items-center justify-center text-[11px] font-semibold ${
+                                      isCorrect
+                                        ? "border-emerald-500 bg-emerald-500 text-white"
+                                        : "border-gray-300 text-gray-400 bg-white"
+                                    }`}
+                                  >
+                                    {optionLabel}
+                                  </span>
+                                </div>
+                                <div className="flex-1">
+                                  <input
+                                    type="text"
+                                    className="w-full bg-transparent border-0 p-0 text-sm md:text-base focus:outline-none focus:ring-0"
+                                    placeholder={`Option ${optIdx + 1}`}
+                                    value={opt}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) =>
+                                      updateOption(
+                                        index,
+                                        optIdx,
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                  {isCorrect && (
+                                    <p className="text-[11px] md:text-xs text-emerald-700 mt-0.5 font-medium">
+                                      Marked as correct answer
+                                    </p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          }
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeQuestion(index)}
-                        disabled={questions.length === 1}
-                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Remove
-                      </button>
                     </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
-                    <textarea
-                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      rows={3}
-                      placeholder="Enter question text..."
-                      value={q.text}
-                      onChange={(e) =>
-                        updateQuestionField(index, "text", e.target.value)
-                      }
-                    />
+          {/* Right: Summary / helper panel */}
+          <aside className="space-y-4 md:space-y-5">
+            <div className="bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-500 rounded-3xl text-white p-5 md:p-6 shadow-sm">
+              <p className="text-xs md:text-sm font-semibold uppercase tracking-[0.2em] text-indigo-100/90">
+                Overview
+              </p>
+              <h2 className="mt-2 text-lg md:text-xl font-semibold">
+                Test configuration
+              </h2>
+              <p className="mt-2 text-xs md:text-sm text-indigo-100/90 leading-relaxed">
+                This aptitude test will be auto-graded based on the correct
+                options you select for each question.
+              </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                      {(q.options || ["", "", "", ""]).map(
-                        (opt, optIdx) => (
-                          <div
-                            key={optIdx}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <input
-                              type="radio"
-                              name={`correct-${index}`}
-                              checked={q.correctIndex === optIdx}
-                              onChange={() => setCorrectIndex(index, optIdx)}
-                              className="h-4 w-4 text-indigo-600 border-gray-300"
-                            />
-                            <input
-                              type="text"
-                              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                              placeholder={`Option ${optIdx + 1}`}
-                              value={opt}
-                              onChange={(e) =>
-                                updateOption(index, optIdx, e.target.value)
-                              }
-                            />
-                          </div>
-                        )
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">
-                          Category (optional)
-                        </label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                          placeholder="e.g. Quant, Logical, Verbal, Programming"
-                          value={q.category}
-                          onChange={(e) =>
-                            updateQuestionField(
-                              index,
-                              "category",
-                              e.target.value
-                            )
-                          }
-                        />
-                        <p className="text-[11px] text-gray-400 mt-1">
-                          Tip: use <strong>Quant</strong>,{" "}
-                          <strong>Logical</strong>, <strong>Verbal</strong>, or{" "}
-                          <strong>Programming</strong> for best analytics.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-white/10 rounded-2xl px-3 py-2.5">
+                  <p className="text-[11px] text-indigo-100/90">Duration</p>
+                  <p className="text-sm md:text-base font-semibold">
+                    {Number(durationMinutes) || 60} min
+                  </p>
+                </div>
+                <div className="bg-white/10 rounded-2xl px-3 py-2.5">
+                  <p className="text-[11px] text-indigo-100/90">
+                    Total questions
+                  </p>
+                  <p className="text-sm md:text-base font-semibold">
+                    {questions.length}
+                  </p>
+                </div>
               </div>
-            </>
-          )}
+
+              <ul className="mt-4 space-y-1.5 text-xs md:text-sm text-indigo-100/90">
+                <li>• Each question supports up to 4 options.</li>
+                <li>• Select exactly one correct answer per question.</li>
+                <li>• Candidates will see one clean MCQ interface.</li>
+              </ul>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-100 p-5 md:p-6 shadow-sm space-y-3 text-sm text-gray-700">
+              <h3 className="text-base font-semibold text-gray-900">
+                Best practices
+              </h3>
+              <ul className="space-y-2 text-xs md:text-sm text-gray-500">
+                <li>• Keep questions unambiguous and role-relevant.</li>
+                <li>• Balance difficulty across the entire test.</li>
+                <li>• Use all four options whenever possible.</li>
+                <li>• Review the Preview before publishing to candidates.</li>
+              </ul>
+            </div>
+          </aside>
         </div>
 
         {/* Preview Overlay */}
         {previewOpen && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 px-2">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+              <div className="px-6 md:px-8 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Aptitude Test – Preview
+                  <h2 className="text-lg md:text-xl font-semibold text-gray-900">
+                    Candidate View – Aptitude Test
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    This is how the candidate will see the questions (minus
-                    timer &amp; AI proctoring).
+                  <p className="text-xs md:text-sm text-gray-500 mt-0.5">
+                    This is how the candidate will see the MCQs. Correct answers
+                    are highlighted only for you as the recruiter.
                   </p>
                 </div>
                 <button
                   onClick={() => setPreviewOpen(false)}
-                  className="px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 rounded-full border border-gray-200 text-xs md:text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+              <div className="px-6 md:px-8 py-3 border-b border-gray-100 flex items-center justify-between text-xs md:text-sm text-gray-500">
                 <span>
                   Duration: {Number(durationMinutes) || 60} minutes ·{" "}
-                  {questions.length} questions
+                  {questions.length} question
+                  {questions.length !== 1 ? "s" : ""}
                 </span>
                 {jobMeta && (
-                  <span>
+                  <span className="truncate">
                     {jobMeta.title} · {jobMeta.company}
                   </span>
                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="flex-1 overflow-y-auto px-6 md:px-8 py-4 space-y-4">
                 {questions.map((q, idx) => (
                   <div
                     key={idx}
-                    className="border border-gray-100 rounded-xl p-4 bg-gray-50"
+                    className="border border-gray-100 rounded-2xl p-4 md:p-5 bg-gray-50"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <p className="text-sm font-medium text-gray-900">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <p className="text-sm md:text-base font-medium text-gray-900">
                         {idx + 1}.{" "}
                         {q.text || (
                           <span className="italic text-gray-400">
@@ -642,30 +617,34 @@ export default function AptitudeEditorPage() {
                           </span>
                         )}
                       </p>
-                      {q.category && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold border border-indigo-200">
-                          {formatCategoryLabel(
-                            normalizeCategory(q.category)
-                          )}
-                        </span>
-                      )}
+                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] md:text-xs font-semibold border border-emerald-200">
+                        Correct:{" "}
+                        {["A", "B", "C", "D"][q.correctIndex] || "Not set"}
+                      </span>
                     </div>
                     <div className="space-y-2 mt-2">
-                      {(q.options || []).map((opt, optIdx) => (
-                        <div
-                          key={optIdx}
-                          className="flex items-center gap-2 text-sm text-gray-700"
-                        >
-                          <span className="h-4 w-4 rounded-full border border-gray-300 bg-white" />
-                          <span>
-                            {opt || (
-                              <span className="italic text-gray-400">
-                                [empty option]
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      ))}
+                      {(q.options || []).map((opt, optIdx) => {
+                        const isCorrect = q.correctIndex === optIdx;
+                        return (
+                          <div
+                            key={optIdx}
+                            className={`flex items-center gap-2 text-sm md:text-base px-3 py-2.5 rounded-2xl border ${
+                              isCorrect
+                                ? "border-emerald-400 bg-emerald-50"
+                                : "border-gray-200 bg-white"
+                            }`}
+                          >
+                            <span className="h-4 w-4 rounded-full border border-gray-300 bg-white" />
+                            <span>
+                              {opt || (
+                                <span className="italic text-gray-400">
+                                  [empty option]
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

@@ -16,8 +16,6 @@ export default function CandidateSettings() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Settings</h1>
-
       {/* SECURITY */}
       <section className="card p-4 space-y-3">
         <h2 className="text-lg font-semibold">Security</h2>

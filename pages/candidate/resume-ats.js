@@ -25,7 +25,7 @@ export default function ResumeATS() {
   const resumeInputB = useRef(null);
   const jdInput = useRef(null);
 
-  // Hydrate labels from localStorage (only names)
+  // Hydrate labels from localStorage
   useEffect(() => {
     try {
       const f = localStorage.getItem("recruiver.resume.file");
@@ -184,229 +184,218 @@ export default function ResumeATS() {
   const canGeneral = !!resumeFile && !loadingGeneral;
   const canMatch = !!resumeFile && !!jdFile && !loadingMatch;
 
-  const labelFor = (slot) => {
-    if (lastSource === slot && savedFile?.name) return savedFile.name;
-    return "Drop or click to upload your resume";
-  };
-
-  const jdLabel =
-    jdFileMeta?.name || "Drop or click to upload the job description";
-
   return (
-    <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900">Resume ATS Analysis</h1>
-        <p className="text-lg text-gray-600 mt-3">
-          Optimize your resume with AI-powered ATS scoring. Analyze general compatibility or match against specific job descriptions.
-        </p>
-      </div>
-
+    <div className="pb-12 pt-6">
       {/* Main Content - Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
         {/* LEFT CARD – General ATS */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
-          <div className="flex items-start justify-between mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-shadow duration-300 flex flex-col">
+          <div className="flex items-start justify-between mb-8">
             <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wide mb-2">
+                Base Analysis
+              </div>
               <h2 className="text-2xl font-bold text-gray-900">General ATS Score</h2>
-              <p className="text-base text-gray-600 mt-2">
-                Get an overall ATS compatibility score for your resume
+              <p className="text-gray-500 text-sm mt-1">
+                Get an overall compatibility score and formatting check.
               </p>
             </div>
-            <div className="text-4xl">📄</div>
+            <div className="h-12 w-12 bg-indigo-100 rounded-xl flex items-center justify-center text-2xl text-indigo-600">
+              📄
+            </div>
           </div>
 
           {/* Upload Area */}
-          <div
-            className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer mb-6 text-center"
-            onClick={() => resumeInputA.current?.click()}
-            role="button"
-            aria-label="Upload resume for general ATS"
-          >
-            <div className="text-5xl mb-4">📤</div>
-            <div className="text-lg font-bold text-gray-900">
-              {lastSource === "A" && savedFile?.name ? savedFile.name : "Upload Your Resume"}
-            </div>
-            <div className="text-sm text-gray-600 mt-3">
-              Drag and drop or click to browse
-            </div>
-            <div className="text-xs text-gray-500 mt-4">
-              Accepted formats: PDF, DOC, DOCX, TXT
-            </div>
-            {lastSource === "A" && savedFile?.name && (
-              <div className="text-xs text-indigo-600 font-medium mt-3 flex items-center justify-center gap-2">
-                ✓ File loaded
+          <div className="flex-1 flex flex-col">
+            <div
+              className={`flex-1 border-2 border-dashed rounded-xl p-8 transition-all cursor-pointer flex flex-col items-center justify-center text-center group ${
+                 lastSource === "A" && savedFile?.name 
+                 ? "border-indigo-300 bg-indigo-50/30" 
+                 : "border-gray-200 hover:border-indigo-400 hover:bg-gray-50"
+              }`}
+              onClick={() => resumeInputA.current?.click()}
+              role="button"
+            >
+              <div className={`h-16 w-16 rounded-full flex items-center justify-center text-3xl mb-4 transition-transform group-hover:scale-110 ${
+                 lastSource === "A" && savedFile?.name ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-500"
+              }`}>
+                 {lastSource === "A" && savedFile?.name ? "✓" : "☁️"}
               </div>
-            )}
+              
+              <div className="font-bold text-gray-900 text-lg max-w-[250px] truncate">
+                {lastSource === "A" && savedFile?.name ? savedFile.name : "Upload Your Resume"}
+              </div>
+              
+              <div className="text-sm text-gray-500 mt-2">
+                PDF, DOC, DOCX, TXT
+              </div>
+            </div>
+            <input
+              ref={resumeInputA}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={(e) => handleResumeUpload(e.target.files?.[0], "A")}
+            />
+
+            {/* Action Button */}
+            <button
+              className={`w-full mt-6 px-6 py-4 rounded-xl font-bold text-base transition-all transform active:scale-[0.98] ${
+                canGeneral
+                  ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-200 hover:shadow-xl"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+              onClick={onGenerateGeneral}
+              disabled={!canGeneral}
+            >
+              {loadingGeneral ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing...
+                </span>
+              ) : (
+                "Generate ATS Score"
+              )}
+            </button>
           </div>
-          <input
-            ref={resumeInputA}
-            type="file"
-            accept=".pdf,.doc,.docx,.txt"
-            className="hidden"
-            onChange={(e) => handleResumeUpload(e.target.files?.[0], "A")}
-          />
-
-          {/* Button */}
-          <button
-            className={`w-full px-6 py-3 rounded-lg font-bold text-base transition-all ${
-              canGeneral
-                ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:shadow-lg active:scale-95"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            }`}
-            onClick={onGenerateGeneral}
-            disabled={!canGeneral}
-          >
-            {loadingGeneral ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin">⏳</span>
-                Analyzing Resume…
-              </span>
-            ) : (
-              "Generate ATS Score"
-            )}
-          </button>
-
-          <p className="text-sm text-gray-500 text-center mt-4">
-            {canGeneral ? (
-              <span className="text-green-600 font-medium">✓ Ready to generate</span>
-            ) : (
-              "Upload a resume to get started"
-            )}
-          </p>
         </div>
 
         {/* RIGHT CARD – JD Match */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
-          <div className="flex items-start justify-between mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-shadow duration-300 flex flex-col">
+          <div className="flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Match with Job Description</h2>
-              <p className="text-base text-gray-600 mt-2">
-                Compare your resume against a specific company JD
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wide mb-2">
+                Comparison
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Match with JD</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Compare your resume against a specific job description.
               </p>
             </div>
-            <div className="text-4xl">🎯</div>
+            <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl text-blue-600">
+              🎯
+            </div>
           </div>
 
-          {/* Resume Upload */}
-          <div className="mb-6">
-            <div className="text-sm font-semibold text-gray-900 mb-3">Your Resume</div>
+          <div className="flex-1 space-y-4">
+            {/* Resume Upload Box */}
             <div
-              className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer text-center"
+              className={`border border-dashed rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-colors group ${
+                lastSource === "B" && savedFile?.name ? "border-blue-300 bg-blue-50/30" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
+              }`}
               onClick={() => resumeInputB.current?.click()}
-              role="button"
-              aria-label="Upload resume for JD match"
             >
-              <div className="text-3xl mb-2">📄</div>
-              <div className="text-sm font-bold text-gray-900">
-                {lastSource === "B" && savedFile?.name ? savedFile.name : "Upload Resume"}
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
-                Click to browse
-              </div>
+               <div className={`h-12 w-12 rounded-lg flex items-center justify-center text-xl shrink-0 ${
+                  lastSource === "B" && savedFile?.name ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
+               }`}>
+                  📄
+               </div>
+               <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-gray-900 truncate">
+                    {lastSource === "B" && savedFile?.name ? savedFile.name : "Upload Resume"}
+                  </div>
+                  <div className="text-xs text-gray-500">Click to browse file</div>
+               </div>
+               <input
+                  ref={resumeInputB}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={(e) => handleResumeUpload(e.target.files?.[0], "B")}
+                />
             </div>
-            <input
-              ref={resumeInputB}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              className="hidden"
-              onChange={(e) => handleResumeUpload(e.target.files?.[0], "B")}
-            />
-          </div>
 
-          {/* JD Upload */}
-          <div className="mb-6">
-            <div className="text-sm font-semibold text-gray-900 mb-3">Job Description</div>
+            {/* JD Upload Box */}
             <div
-              className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all cursor-pointer text-center"
+              className={`border border-dashed rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-colors group ${
+                 jdFileMeta?.name ? "border-blue-300 bg-blue-50/30" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
+              }`}
               onClick={() => jdInput.current?.click()}
-              role="button"
-              aria-label="Upload job description file"
             >
-              <div className="text-3xl mb-2">📋</div>
-              <div className="text-sm font-bold text-gray-900">
-                {jdFileMeta?.name ? jdFileMeta.name : "Upload JD"}
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
-                Click to browse
-              </div>
+               <div className={`h-12 w-12 rounded-lg flex items-center justify-center text-xl shrink-0 ${
+                  jdFileMeta?.name ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
+               }`}>
+                  📋
+               </div>
+               <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-gray-900 truncate">
+                    {jdFileMeta?.name ? jdFileMeta.name : "Upload Job Description"}
+                  </div>
+                  <div className="text-xs text-gray-500">Click to browse file</div>
+               </div>
+               <input
+                  ref={jdInput}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={(e) => handleJDUpload(e.target.files?.[0])}
+                />
             </div>
-            <input
-              ref={jdInput}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              className="hidden"
-              onChange={(e) => handleJDUpload(e.target.files?.[0])}
-            />
+
+            {/* Status Indicators */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
+               <StatusBadge 
+                 label="Resume" 
+                 active={!!(lastSource === "B" && savedFile?.name)} 
+               />
+               <StatusBadge 
+                 label="JD File" 
+                 active={!!jdFileMeta?.name} 
+               />
+            </div>
+
+            {/* Action Button */}
+            <button
+              className={`w-full mt-4 px-6 py-4 rounded-xl font-bold text-base transition-all transform active:scale-[0.98] ${
+                canMatch
+                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-200 hover:shadow-xl"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+              onClick={onGenerateMatch}
+              disabled={!canMatch}
+            >
+              {loadingMatch ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Comparing...
+                </span>
+              ) : (
+                "Generate Match Score"
+              )}
+            </button>
           </div>
-
-          {/* Status Indicators */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-              lastSource === "B" && savedFile?.name
-                ? "bg-green-50 border border-green-200"
-                : "bg-gray-50 border border-gray-200"
-            }`}>
-              <span className="text-lg">{lastSource === "B" && savedFile?.name ? "✓" : "○"}</span>
-              <span className="text-xs font-medium text-gray-700">Resume</span>
-            </div>
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-              jdFileMeta?.name
-                ? "bg-green-50 border border-green-200"
-                : "bg-gray-50 border border-gray-200"
-            }`}>
-              <span className="text-lg">{jdFileMeta?.name ? "✓" : "○"}</span>
-              <span className="text-xs font-medium text-gray-700">JD File</span>
-            </div>
-          </div>
-
-          {/* Button */}
-          <button
-            className={`w-full px-6 py-3 rounded-lg font-bold text-base transition-all ${
-              canMatch
-                ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:shadow-lg active:scale-95"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            }`}
-            onClick={onGenerateMatch}
-            disabled={!canMatch}
-          >
-            {loadingMatch ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin">⏳</span>
-                Comparing Resume…
-              </span>
-            ) : (
-              "Generate Match Score"
-            )}
-          </button>
-
-          <p className="text-sm text-gray-500 text-center mt-4">
-            {canMatch ? (
-              <span className="text-green-600 font-medium">✓ Ready to generate</span>
-            ) : (
-              "Upload both files to get started"
-            )}
-          </p>
         </div>
       </div>
 
-      {/* Footer Section */}
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-8">
-        <div className="flex items-center justify-between gap-6">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">View Your Resume</h3>
-            <p className="text-base text-gray-600 mt-1">
-              Manage and preview your saved resume at any time
-            </p>
-          </div>
-          <Link 
-            href="/candidate/resume-view" 
-            className="px-6 py-3 bg-white border-2 border-indigo-200 text-indigo-600 font-bold rounded-lg hover:bg-indigo-50 transition-all whitespace-nowrap"
-          >
-            View Resume
-          </Link>
+      {/* Footer Section - View Resume Link */}
+      <div className="mt-8 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
+        <div className="flex items-center gap-4">
+           <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center shadow-sm text-lg">👁️</div>
+           <div>
+              <h3 className="font-bold text-gray-900">Already have a resume uploaded?</h3>
+              <p className="text-sm text-gray-600">Preview your current file stored in the system.</p>
+           </div>
         </div>
+        <Link 
+          href="/candidate/resume-view" 
+          className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+        >
+          View Stored Resume
+        </Link>
       </div>
+    </div>
+  );
+}
+
+// Helper Component for the Match Card Indicators (Updated to Blue)
+function StatusBadge({ label, active }) {
+  return (
+    <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+       active ? "bg-blue-50 text-blue-700 border border-blue-100" : "bg-gray-50 text-gray-400 border border-gray-100"
+    }`}>
+       <div className={`w-2 h-2 rounded-full ${active ? "bg-blue-500 animate-pulse" : "bg-gray-300"}`} />
+       <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
     </div>
   );
 }

@@ -7,6 +7,7 @@ const fs = require("fs");
 
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { db } = require("../lib/firebaseAdmin");
+const { sendHrSelectionEmail } = require("../lib/email");
 
 /* =========================================================
    Helpers
@@ -199,6 +200,13 @@ router.post("/", requireAuth, requireRole("RECRUITER"), async (req, res) => {
     const now = new Date();
     const deadlineDate = toDate(deadline);
 
+    const skillsArray = Array.isArray(requiredSkills)
+      ? requiredSkills
+      : String(requiredSkills || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
     const docRef = await db.collection("jobs").add({
       recruiterId: req.user.id,
       title,
@@ -211,12 +219,7 @@ router.post("/", requireAuth, requireRole("RECRUITER"), async (req, res) => {
       deadline: deadlineDate || null,
       description,
       jdFilePath,
-      requiredSkills: Array.isArray(requiredSkills)
-        ? requiredSkills
-        : String(requiredSkills || "")
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
+      requiredSkills: skillsArray,
       openings: Number(openings) || 1,
       status: "OPEN",
       createdAt: now,
@@ -235,13 +238,7 @@ router.post("/", requireAuth, requireRole("RECRUITER"), async (req, res) => {
       deadline: deadlineDate || null,
       description,
       jdFilePath,
-      requiredSkills:
-        Array.isArray(requiredSkills) && requiredSkills.length
-          ? requiredSkills
-          : String(requiredSkills || "")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
+      requiredSkills: skillsArray,
       openings: Number(openings) || 1,
       recruiterId: req.user.id,
       status: "OPEN",
@@ -264,7 +261,6 @@ router.post("/", requireAuth, requireRole("RECRUITER"), async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const now = new Date();
-    // fetch all jobs, then filter + auto-close based on deadline/status
     const snap = await db.collection("jobs").orderBy("createdAt", "desc").get();
 
     const jobs = [];
@@ -415,7 +411,6 @@ router.post(
       let job = jobSnap.data();
 
       const now = new Date();
-      // auto-close if past deadline
       job = await autoCloseIfDeadlinePassed(jobId, job, now);
 
       const isOpen =
@@ -432,7 +427,6 @@ router.post(
       }
 
       if (deadline && now > deadline) {
-        // double safety – if somehow still open
         await jobRef.set(
           { status: "CLOSED", updatedAt: now },
           { merge: true }
@@ -464,7 +458,7 @@ router.post(
         studentId: userId,
         recruiterId: job.recruiterId || null,
         status: "APPLIED",
-        stage: 1,
+        stage: 0, // Stage 0 – Resume / ATS
         resumePath: resumePath || "",
         updatedAt: now,
       };
@@ -487,6 +481,7 @@ router.post(
 /**
  * GET /api/jobs/applied
  * Candidate’s applied jobs
+ * ❗ Now hides applications whose job posting was deleted
  */
 router.get(
   "/applied",
@@ -513,7 +508,7 @@ router.get(
       const jobsById = {};
       if (jobIds.length) {
         const chunks = [];
-        for (let i = 0; i < jobIds.length; i += 10; i += 1) {
+        for (let i = 0; i < jobIds.length; i += 10) {
           chunks.push(jobIds.slice(i, i + 10));
         }
         for (const chunk of chunks) {
@@ -527,14 +522,20 @@ router.get(
         }
       }
 
-      const applications = appsSnap.docs.map((doc) => {
+      const applications = [];
+      for (const doc of appsSnap.docs) {
         const data = doc.data();
-        return {
+        const job = jobsById[data.jobId];
+
+        // 🔥 If the job was deleted or missing, skip this application entirely
+        if (!job) continue;
+
+        applications.push({
           id: doc.id,
           ...data,
-          job: jobsById[data.jobId] || null,
-        };
-      });
+          job,
+        });
+      }
 
       return res.json({ applications });
     } catch (err) {
@@ -601,26 +602,10 @@ router.get(
 
       const applicants = appsSnap.docs.map((doc) => {
         const data = doc.data();
-        const aptitudeSummary = data.aptitudeSummary || {};
-        const violationSummary = aptitudeSummary.violationSummary || {};
-        const totalViolations =
-          typeof violationSummary.totalViolations === "number"
-            ? violationSummary.totalViolations
-            : Array.isArray(aptitudeSummary.violations)
-            ? aptitudeSummary.violations.length
-            : 0;
-
         return {
           id: doc.id,
           ...data,
           candidate: usersById[data.studentId] || null,
-          // surfaced aptitude info for job-detail pipeline
-          aptitudeScore:
-            typeof data.score === "number" ? data.score : null,
-          aptitudeAutoSubmitted: !!aptitudeSummary.autoSubmitted,
-          aptitudeViolations: totalViolations,
-          aptitudeViolationSummary: violationSummary,
-          aptitudeSummary,
         };
       });
 
@@ -712,14 +697,18 @@ router.get(
             ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
             : user.name || "") || "Unknown";
 
-        const aptitudeSummary = app.aptitudeSummary || {};
-        const violationSummary = aptitudeSummary.violationSummary || {};
-        const totalViolations =
-          typeof violationSummary.totalViolations === "number"
-            ? violationSummary.totalViolations
-            : Array.isArray(aptitudeSummary.violations)
-            ? aptitudeSummary.violations.length
-            : 0;
+        const aptitudeScore =
+          typeof app.score === "number" ? app.score : null;
+        const aptitudeSummary = app.aptitudeSummary || null;
+
+        const videoInterviewScore =
+          typeof app.videoInterviewScore === "number"
+            ? app.videoInterviewScore
+            : null;
+        const videoInterviewSummary = app.videoInterviewSummary || null;
+
+        const hrRound = app.hrRound || null;
+        const stage = typeof app.stage === "number" ? app.stage : 0;
 
         return {
           id: app.id,
@@ -731,17 +720,15 @@ router.get(
           jobTitle: job.title || "",
           company: job.company || "",
           status: app.status || "APPLIED",
-          score: app.score ?? 0,
-          stage: app.stage ?? 1,
+          score: aptitudeScore,
+          stage,
           appliedDate: app.createdAt || null,
           resumePath: app.resumePath || "",
-          // Round-2 aptitude surfaced cleanly for recruiter table
-          aptitudeScore:
-            typeof app.score === "number" ? app.score : null,
-          aptitudeAutoSubmitted: !!aptitudeSummary.autoSubmitted,
-          aptitudeViolations: totalViolations,
-          aptitudeViolationSummary: violationSummary,
+          aptitudeScore,
           aptitudeSummary,
+          videoInterviewScore,
+          videoInterviewSummary,
+          hrRound,
         };
       });
 
@@ -749,20 +736,20 @@ router.get(
       candidates.sort((a, b) => {
         const ad = a.appliedDate
           ? new Date(
-              adValue(a.appliedDate)
+              a.appliedDate._seconds
+                ? a.appliedDate._seconds * 1000
+                : a.appliedDate
             )
           : 0;
         const bd = b.appliedDate
           ? new Date(
-              adValue(b.appliedDate)
+              b.appliedDate._seconds
+                ? b.appliedDate._seconds * 1000
+                : b.appliedDate
             )
           : 0;
         return bd - ad;
       });
-
-      function adValue(v) {
-        return v._seconds ? v._seconds * 1000 : v;
-      }
 
       return res.json({ candidates });
     } catch (err) {
@@ -774,16 +761,8 @@ router.get(
 
 /**
  * POST /api/jobs/applications/:id/aptitude-score
- * Candidate submits Round 2 aptitude test score.
- * Body: {
- *   score: number,
- *   summary?: {
- *     total, correct, attempted, skipped,
- *     autoSubmitted, byCategory,
- *     violations, violationSummary,
- *     startedAt, completedAt, durationSeconds, ...
- *   }
- * }
+ * Candidate submits aptitude test score.
+ * 🔁 After this, candidate should see "Under Review" (no Round 2 yet).
  */
 router.post(
   "/applications/:id/aptitude-score",
@@ -812,7 +791,7 @@ router.post(
 
       const now = new Date();
 
-      // status progression: ensure candidate doesn't get downgraded
+      // If recruiter had SHORTLISTED, move to UNDER_REVIEW after test
       let nextStatus = app.status || "APPLIED";
       if (nextStatus === "SHORTLISTED") {
         nextStatus = "UNDER_REVIEW";
@@ -821,51 +800,17 @@ router.post(
       const updates = {
         score: numericScore,
         status: nextStatus,
-        stage: app.stage && app.stage > 2 ? app.stage : 2,
         updatedAt: now,
       };
 
-      if (summary && typeof summary === "object") {
-        // Normalize timing
-        const startedAt = summary.startedAt ? toDate(summary.startedAt) : null;
-        const completedAt = summary.completedAt
-          ? toDate(summary.completedAt)
-          : now;
-        const durationSeconds = Number(summary.durationSeconds);
-        const safeDuration = Number.isNaN(durationSeconds)
-          ? null
-          : durationSeconds;
+      // Round 1 complete – keep the application in Stage 1
+      // (Round 2 invitation is controlled by recruiter via SHORTLIST_ROUND2)
+      const newStage =
+        typeof app.stage === "number" ? Math.max(app.stage, 1) : 1;
+      updates.stage = newStage;
 
-        // Normalize violations
-        const violations = Array.isArray(summary.violations)
-          ? summary.violations
-          : [];
-        const violationSummary =
-          summary.violationSummary && typeof summary.violationSummary === "object"
-            ? summary.violationSummary
-            : {};
-
-        const totalViolations =
-          typeof violationSummary.totalViolations === "number"
-            ? violationSummary.totalViolations
-            : violations.length;
-
-        updates.aptitudeSummary = {
-          ...summary,
-          startedAt: startedAt || null,
-          completedAt: completedAt || null,
-          durationSeconds: safeDuration,
-          violations,
-          violationSummary: {
-            ...violationSummary,
-            totalViolations,
-          },
-          lastUpdatedAt: now,
-        };
-
-        updates.aptitudeStartedAt = startedAt || app.aptitudeStartedAt || null;
-        updates.aptitudeCompletedAt = completedAt;
-        updates.aptitudeDurationSeconds = safeDuration;
+      if (summary) {
+        updates.aptitudeSummary = summary;
       }
 
       await appRef.set(updates, { merge: true });
@@ -888,13 +833,131 @@ router.post(
 );
 
 /**
+ * NEW: POST /api/jobs/applications/:id/advance
+ * Recruiter advances application through pipeline.
+ * Body: { action, hrDateTime?, hrLocation?, hrInstructions? }
+ */
+router.post(
+  "/applications/:id/advance",
+  requireAuth,
+  requireRole("RECRUITER"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, hrDateTime, hrLocation, hrInstructions } = req.body || {};
+
+      if (!action) {
+        return res.status(400).json({ message: "action is required" });
+      }
+
+      const appRef = db.collection("applications").doc(id);
+      const appSnap = await appRef.get();
+      if (!appSnap.exists) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const app = appSnap.data();
+
+      // Ensure recruiter owns the job
+      const jobRef = db.collection("jobs").doc(app.jobId);
+      const jobSnap = await jobRef.get();
+      if (!jobSnap.exists) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      const job = jobSnap.data();
+      if (job.recruiterId !== req.user.id) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to update this application" });
+      }
+
+      const updates = { updatedAt: new Date() };
+
+      if (action === "SHORTLIST_ROUND1") {
+        // Stage 0 → Stage 1 (invite aptitude)
+        updates.stage = 1;
+        updates.status = "SHORTLISTED";
+      } else if (action === "SHORTLIST_ROUND2") {
+        // Invite to AI video interview – only AFTER aptitude score exists
+        if (typeof app.score !== "number") {
+          return res
+            .status(400)
+            .json({ message: "Aptitude score not recorded yet" });
+        }
+        updates.stage = 2;
+        updates.status = "SHORTLISTED";
+      } else if (action === "SELECT_HR") {
+        // Stage 2 → Stage 3 (Final HR – offline)
+        if (typeof app.videoInterviewScore !== "number") {
+          return res
+            .status(400)
+            .json({ message: "Video interview score not available" });
+        }
+
+        const hrDate = hrDateTime ? toDate(hrDateTime) : null;
+
+        updates.stage = 3;
+        updates.status = "HR_SCHEDULED";
+        updates.hrRound = {
+          scheduled: true,
+          scheduledAt: hrDate || null,
+          location: hrLocation || "",
+          instructions: hrInstructions || "",
+          emailSentAt: new Date(),
+        };
+
+        // Fetch candidate for email
+        try {
+          const userSnap = await db
+            .collection("users")
+            .doc(app.studentId)
+            .get();
+          const user = userSnap.exists ? userSnap.data() : {};
+          const candidateName =
+            (user.firstName || user.lastName
+              ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+              : user.name || "") || "Candidate";
+
+          const candidateEmail = user.email || null;
+
+          await sendHrSelectionEmail({
+            to: candidateEmail,
+            candidateName,
+            jobTitle: job.title || "your applied position",
+            companyName: job.company || "our company",
+            hrDateTime: hrDate || hrDateTime || null,
+            hrLocation,
+            hrInstructions,
+          });
+        } catch (emailErr) {
+          console.error("Failed to send HR selection email:", emailErr);
+          // Don't fail the pipeline if email sending fails
+        }
+      } else if (action === "REJECT") {
+        updates.status = "REJECTED";
+      } else {
+        return res.status(400).json({ message: "Invalid action" });
+      }
+
+      await appRef.set(updates, { merge: true });
+      const updatedSnap = await appRef.get();
+      const updated = { id: updatedSnap.id, ...updatedSnap.data() };
+
+      return res.json({
+        message: "Application advanced",
+        application: updated,
+      });
+    } catch (err) {
+      console.error("Error in /applications/:id/advance:", err);
+      return res
+        .status(500)
+        .json({ message: "Failed to advance application" });
+    }
+  }
+);
+
+/**
  * POST /api/jobs/applications/:id/status
- * Recruiter updates an application's status / stage / score
- * Body: {
- *   status?: "APPLIED"|"UNDER_REVIEW"|"SHORTLISTED"|"REJECTED",
- *   stage?: number,
- *   score?: number
- * }
+ * (still used for bulk status changes)
  */
 router.post(
   "/applications/:id/status",
@@ -910,6 +973,7 @@ router.post(
         "UNDER_REVIEW",
         "SHORTLISTED",
         "REJECTED",
+        "HR_SCHEDULED",
       ];
 
       const appRef = db.collection("applications").doc(id);
@@ -935,11 +999,10 @@ router.post(
 
       if (status && allowedStatuses.includes(status)) {
         updates.status = status;
-        // simple default stage mapping
         if (!("stage" in req.body)) {
-          if (status === "SHORTLISTED") updates.stage = 2;
-          else if (status === "UNDER_REVIEW") updates.stage = 1;
-          else if (status === "REJECTED") updates.stage = 1;
+          if (status === "SHORTLISTED") updates.stage = 1;
+          else if (status === "UNDER_REVIEW") updates.stage = 0;
+          else if (status === "REJECTED") updates.stage = app.stage ?? 0;
         }
       }
 

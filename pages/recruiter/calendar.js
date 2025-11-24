@@ -1,10 +1,11 @@
-// pages/recruiter/calendar.js
-
+// ============================================
+// FILE 1: pages/recruiter/calendar.js
+// ============================================
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 
 function RecruiterCalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 10, 1)); // November 2025
+  const [currentDate, setCurrentDate] = useState(new Date(2025, 10, 1));
   const [events, setEvents] = useState([
     { date: 4, title: "Interview", type: "interview", color: "blue" },
     { date: 11, title: "Offer Call", type: "offer", color: "emerald" },
@@ -75,22 +76,7 @@ function RecruiterCalendarPage() {
   };
 
   return (
-    <div className="space-y-12">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Calendar & Scheduling 📅
-          </h1>
-          <p className="text-lg text-gray-600">
-            Track interviews, offer calls, and hiring events in one view
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 border border-indigo-200">
-          <span className="text-sm font-semibold text-indigo-700">Demo</span>
-        </div>
-      </div>
-
+    <div className="space-y-8">
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Calendar Card (2 cols) */}
@@ -98,9 +84,10 @@ function RecruiterCalendarPage() {
           <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
             {/* Calendar Header */}
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {monthName}
-              </h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{monthName}</h2>
+                <p className="text-sm text-gray-600 mt-1">Interview scheduling calendar</p>
+              </div>
               <div className="flex gap-3">
                 <button
                   onClick={prevMonth}

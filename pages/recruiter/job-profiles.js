@@ -1,4 +1,6 @@
-// pages/recruiter/job-profiles.js
+// ============================================
+// FILE 1: pages/recruiter/job-profiles.js
+// ============================================
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -9,7 +11,6 @@ function toDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
 
-  // Firestore Timestamp (client or admin) support
   if (typeof value === "object") {
     if (typeof value.toDate === "function") {
       const d = value.toDate();
@@ -45,9 +46,7 @@ function mapServerJobToTable(job) {
     location: job.location,
     salaryRange: job.salaryRange,
     experience: job.experience,
-    // pretty date for table
     deadline: deadlineDate ? formatShortDate(deadlineDate) : "",
-    // raw value passed into the modal so it can build datetime-local string
     rawDeadline: job.deadline || null,
     description: job.description,
     jdFilePath: job.jdFilePath,
@@ -95,7 +94,6 @@ function JobProfiles() {
         location: job.location || "",
         salaryRange: job.salaryRange || "",
         experience: job.experience || "",
-        // datetime-local string goes straight to backend
         deadline: job.deadline || "",
         description: job.description || "",
         jdFilePath: job.jdFilePath || "",
@@ -152,24 +150,18 @@ function JobProfiles() {
   );
   const activeJobs = jobs.filter((j) => j.status === "Open").length;
 
-  // NEW: when recruiter clicks "Configure Aptitude Test"
   const handleConfigureAptitude = (job) => {
     if (!job?.id) return;
     router.push(`/recruiter/aptitude/${job.id}`);
   };
 
-  return (
-    <div className="space-y-12">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Job Postings 💼
-        </h1>
-        <p className="text-lg text-gray-600">
-          Manage and track your active job openings in one place
-        </p>
-      </div>
+  const handleConfigureVideoInterview = (job) => {
+    if (!job?.id) return;
+    router.push(`/recruiter/video-interview/${job.id}/editor`);
+  };
 
+  return (
+    <div className="space-y-8">
       {/* Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
@@ -200,9 +192,9 @@ function JobProfiles() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">All Positions</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Job Postings</h2>
             <p className="text-sm text-gray-600 mt-1">
-              View and manage all your job postings
+              Manage and track your active job openings
             </p>
           </div>
           <button
@@ -228,8 +220,8 @@ function JobProfiles() {
             setJobModalOpen(true);
           }}
           onDeleteJob={onDeleteJob}
-          // ✨ NEW: opens the Aptitude Editor for this job
           onConfigureAptitude={handleConfigureAptitude}
+          onConfigureInterview={handleConfigureVideoInterview}
         />
       </div>
 

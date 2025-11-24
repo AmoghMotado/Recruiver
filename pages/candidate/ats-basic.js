@@ -206,20 +206,13 @@ export default function ATSBasic() {
   }
 
   return (
-    <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900">ATS Analysis Results</h1>
-        <p className="text-lg text-gray-600 mt-3">
-          Detailed breakdown of your resume's ATS compatibility and actionable suggestions for improvement
-        </p>
-      </div>
-
+    <div className="space-y-8 pb-8 pt-6">
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* LEFT COLUMN - Score & Enhancements */}
         <div className="space-y-6">
           {/* Score Card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-center">
               <div className="text-sm font-semibold text-gray-600 mb-4">
                 {careerLevel ? `Career Level: ${careerLevel}` : "Career Level: Not specified"}
@@ -232,7 +225,7 @@ export default function ATSBasic() {
           </div>
 
           {/* Enhancements Card */}
-          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-8">
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-8 shadow-sm">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               💡 AI-Based Enhancements
             </h3>
@@ -251,7 +244,7 @@ export default function ATSBasic() {
         </div>
 
         {/* MIDDLE COLUMN - Parameter Breakdown */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Parameter Breakdown
@@ -300,7 +293,7 @@ export default function ATSBasic() {
         </div>
 
         {/* RIGHT COLUMN - Resume Preview */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8 overflow-hidden flex flex-col">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 overflow-hidden flex flex-col shadow-sm">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Resume Preview</h2>
           <div className="flex-1 overflow-auto bg-gray-900 rounded-lg p-4">
             {isPdf && pdfUrl ? (

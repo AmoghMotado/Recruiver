@@ -1,205 +1,346 @@
 // pages/candidate/ai-mock-interview/live.js
-import { useEffect, useRef, useState } from "react";
+// Multi-question live recording with upload to Firebase Storage + AI submit
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import Layout from "@/components/Layout";
+import Layout from "../../../components/Layout";
+
+import useCamera from "../../../hooks/useCamera";
+import useRecording from "../../../hooks/useRecording";
+import useEyeDetection from "../../../hooks/useEyeDetection";
+import useFaceTracking from "../../../hooks/useFaceTracking";
+import { uploadInterviewVideo } from "../../../firebase/uploadVideo";
+import { useAuth } from "@/lib/auth";
 
 const INTERVIEW_QUESTIONS = [
   "Tell me about yourself and your background.",
   "What are your greatest strengths and how do they apply to this role?",
   "Describe a challenging project you worked on and how you overcame obstacles.",
-  "Where do you see yourself in 5 years?",
+  "Where do you see yourself in 3-5 years?",
   "Why should we hire you for this position?",
 ];
 
+const QUESTION_TIME_LIMIT = 120; // seconds per question
+
 export default function LiveMockInterview() {
   const router = useRouter();
-  const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
+  const { interviewId: interviewIdQuery } = router.query;
 
-  const [status, setStatus] = useState("setup"); // setup, ready, recording, processing, complete
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [countdown, setCountdown] = useState(3);
-  const [transcript, setTranscript] = useState("");
-  const [timeLeft, setTimeLeft] = useState(120);
-  const [stream, setStream] = useState(null);
+  // Normalise interviewId -> string
+  const interviewId = Array.isArray(interviewIdQuery)
+    ? interviewIdQuery[0]
+    : interviewIdQuery || null;
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function setupMedia() {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
-          audio: true,
-        });
-
-        if (!mounted) {
-          mediaStream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-        setStatus("ready");
-      } catch (err) {
-        console.error("Media access error:", err);
-        alert("Please allow camera and microphone access to continue.");
-      }
+  const authCtx = (() => {
+    try {
+      return useAuth();
+    } catch {
+      return null;
     }
+  })();
 
-    setupMedia();
+  const user = authCtx?.user || null;
 
-    return () => {
-      mounted = false;
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
+  // Camera & recording hooks
+  const { videoRef, mediaStream, startCamera, stopCamera } = useCamera();
+
+  const {
+    isRecording,
+    recordedBlob,
+    recordingStartTime,
+    startRecording,
+    stopRecording,
+  } = useRecording();
+
+  // Eye detection + face tracking
+  const {
+    eyeContactPercent,
+    registerFrame,
+    resetEyeContact,
+    rawEyeContactStats,
+  } = useEyeDetection();
+
+  useFaceTracking(videoRef, {
+    enabled: isRecording,
+    onLandmarks: (landmarks) => {
+      registerFrame(landmarks);
+    },
+  });
+
+  // Speech recognition
+  const recognitionRef = useRef(null);
+  const [isRecognizing, setIsRecognizing] = useState(false);
+
+  // UI state
+  const [status, setStatus] = useState("ready"); // ready | running | processing | complete
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_LIMIT);
+  const [processingStage, setProcessingStage] = useState("");
+  const [error, setError] = useState("");
+  const [wordCount, setWordCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(null); // 0–100 during upload
+
+  // Hide chatbot while recording
+  const hideChatbot = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("chatbot-widget");
+    if (el) {
+      el.dataset.originalDisplay = el.style.display;
+      el.style.display = "none";
+    }
+  }, []);
+
+  const showChatbot = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("chatbot-widget");
+    if (el) {
+      el.style.display = el.dataset.originalDisplay || "";
+    }
   }, []);
 
   useEffect(() => {
-    if (isRecording && timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (isRecording && timeLeft === 0) {
-      handleStopRecording();
+    if (status === "running" || status === "processing") {
+      hideChatbot();
+    } else {
+      showChatbot();
     }
-  }, [isRecording, timeLeft]);
+  }, [status, hideChatbot, showChatbot]);
 
-  const startRecording = () => {
-    setCountdown(3);
-    const countdownInterval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownInterval);
-          beginRecording();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
+  // TIMER
+  useEffect(() => {
+    if (status !== "running") return;
 
-  const beginRecording = () => {
-    if (!stream) return;
-
-    chunksRef.current = [];
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: "video/webm;codecs=vp8,opus",
-    });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
+    if (timeLeft <= 0) {
+      if (currentQuestion < INTERVIEW_QUESTIONS.length - 1) {
+        setCurrentQuestion((idx) => idx + 1);
+        setTimeLeft(QUESTION_TIME_LIMIT);
+      } else {
+        handleStopAndSubmit();
       }
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      processAnswer(blob);
-    };
-
-    mediaRecorderRef.current = mediaRecorder;
-    mediaRecorder.start();
-    setIsRecording(true);
-    setTimeLeft(120);
-  };
-
-  const handleStopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+      return;
     }
-  };
 
-  const processAnswer = async (videoBlob) => {
-    setStatus("processing");
+    const timerId = setTimeout(() => {
+      setTimeLeft((t) => t - 1);
+    }, 1000);
 
+    return () => clearTimeout(timerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, timeLeft, currentQuestion]);
+
+  // SPEECH RECOGNITION
+  const startSpeechRecognition = useCallback(() => {
     try {
-      const mockScores = {
-        appearance: Math.floor(Math.random() * 20) + 70,
-        language: Math.floor(Math.random() * 20) + 70,
-        confidence: Math.floor(Math.random() * 20) + 75,
-        contentDelivery: Math.floor(Math.random() * 20) + 70,
-        knowledge: Math.floor(Math.random() * 20) + 65,
+      if (typeof window === "undefined") return;
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn("Speech recognition not supported in this browser.");
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event) => {
+        let full = "";
+        for (let i = 0; i < event.results.length; i++) {
+          full += event.results[i][0].transcript + " ";
+        }
+        const finalText = full.trim();
+        setTranscript(finalText);
+        setWordCount(
+          finalText ? finalText.split(/\s+/).filter(Boolean).length : 0
+        );
       };
 
-      const newAnswers = [
-        ...answers,
-        {
-          question: INTERVIEW_QUESTIONS[currentQuestion],
-          videoBlob,
-          scores: mockScores,
-          transcript: transcript || "Answer recorded",
-        },
-      ];
+      recognition.onerror = (e) => {
+        console.warn("Speech recognition error:", e.error);
+      };
 
-      setAnswers(newAnswers);
-      setTranscript("");
+      recognition.onend = () => {
+        if (status === "running") {
+          try {
+            recognition.start();
+          } catch (err) {
+            console.warn("Could not restart speech recognition:", err);
+          }
+        }
+      };
 
-      if (currentQuestion < INTERVIEW_QUESTIONS.length - 1) {
-        setCurrentQuestion(currentQuestion + 1);
-        setStatus("ready");
-      } else {
-        finishInterview(newAnswers);
-      }
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsRecognizing(true);
+      console.log("✅ Speech recognition started");
     } catch (err) {
-      console.error("Processing error:", err);
-      alert("Failed to process answer. Please try again.");
-      setStatus("ready");
+      console.error("Speech recognition error:", err);
     }
+  }, [status]);
+
+  const stopSpeechRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping speech recognition:", e);
+      }
+      recognitionRef.current = null;
+    }
+    setIsRecognizing(false);
+  }, []);
+
+  // START ANSWER
+  const startAnswer = async () => {
+    if (status === "running") return;
+
+    setError("");
+    setTranscript("");
+    setWordCount(0);
+    resetEyeContact();
+
+    // Ensure camera is on
+    let stream = mediaStream;
+    if (!stream) {
+      stream = await startCamera();
+      if (!stream) {
+        setError(
+          "Unable to access camera/microphone. Please allow permissions."
+        );
+        return;
+      }
+    }
+
+    startRecording(stream);
+    startSpeechRecognition();
+    setStatus("running");
+    setTimeLeft(QUESTION_TIME_LIMIT);
   };
 
-  const finishInterview = async (finalAnswers) => {
-    setStatus("complete");
+  // STOP & SUBMIT FULL INTERVIEW
+  const handleStopAndSubmit = async () => {
+    if (status === "processing" || status === "complete") return;
 
-    let totalAppearance = 0,
-      totalLanguage = 0,
-      totalConfidence = 0,
-      totalDelivery = 0,
-      totalKnowledge = 0;
+    // Normalise / final safety for interviewId
+    const effectiveInterviewId =
+      interviewId ||
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("interviewId")
+        : null);
 
-    finalAnswers.forEach((ans) => {
-      totalAppearance += ans.scores.appearance;
-      totalLanguage += ans.scores.language;
-      totalConfidence += ans.scores.confidence;
-      totalDelivery += ans.scores.contentDelivery;
-      totalKnowledge += ans.scores.knowledge;
-    });
+    if (!effectiveInterviewId) {
+      setError("Interview ID missing. Please restart the interview.");
+      console.error("[LIVE] Missing interviewId, cannot submit.");
+      return;
+    }
 
-    const count = finalAnswers.length;
-    const averageScores = {
-      appearance: Math.round(totalAppearance / count),
-      language: Math.round(totalLanguage / count),
-      confidence: Math.round(totalConfidence / count),
-      contentDelivery: Math.round(totalDelivery / count),
-      knowledge: Math.round(totalKnowledge / count),
-    };
+    setStatus("processing");
+    setProcessingStage("Stopping recording and preparing your interview...");
+    setUploadProgress(null);
+    setError("");
+    stopSpeechRecognition();
 
     try {
-      const res = await fetch("/api/mock-interview/attempts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(averageScores),
-      });
+      console.log("[LIVE] handleStopAndSubmit called");
 
-      if (!res.ok) throw new Error("Failed to save results");
+      // 1) Stop recording and get Blob
+      const blob = await stopRecording();
+      const videoBlob = blob || recordedBlob;
 
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      // Turn off camera as soon as we have the video
+      stopCamera();
+
+      if (!videoBlob) {
+        throw new Error("No recorded video found. Please record first.");
       }
 
+      // Determine userId from auth (fallback to demo)
+      const effectiveUserId =
+        user?.uid ||
+        user?.id ||
+        user?.userId ||
+        user?._id ||
+        "demoUser123";
+
+      console.log("[LIVE] Using userId:", effectiveUserId);
+
+      // 2) Upload video to Firebase Storage
+      setProcessingStage("Uploading video to cloud...");
+      setUploadProgress(0);
+
+      console.log("[LIVE] Uploading video...");
+      const uploadResult = await uploadInterviewVideo(
+        videoBlob,
+        effectiveUserId,
+        (pct) => {
+          setUploadProgress(pct);
+          setProcessingStage(`Uploading video to cloud... ${pct}%`);
+        }
+      );
+
+      console.log("[LIVE] Video uploaded:", uploadResult.downloadUrl);
+
+      // 3) Call backend for AI analysis
+      setProcessingStage("Running AI analysis on your interview...");
+
+      const extraStats = {
+        totalWords: wordCount,
+        eyeContactFrames: rawEyeContactStats.goodFramesRef.current,
+        totalFrames: rawEyeContactStats.totalFramesRef.current,
+      };
+
+      const payload = {
+        interviewId: effectiveInterviewId,
+        userId: effectiveUserId,
+        videoUrl: uploadResult.downloadUrl,
+        transcript,
+        eyeContactPercent,
+        extraStats,
+        startedAt: recordingStartTime
+          ? recordingStartTime.toISOString()
+          : null,
+        endedAt: new Date().toISOString(),
+      };
+
+      console.log("[LIVE] Submitting payload:", payload);
+
+      const res = await fetch("/api/mock-interview/submit", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      console.log("[LIVE] Submit response:", res.status, data);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit interview");
+      }
+
+      console.log("✅ Interview submitted. Attempt:", data.attemptId);
+      setProcessingStage("Complete! Redirecting to your AI feedback...");
+      setStatus("complete");
+
+      // 🔁 IMPORTANT: go directly to the results page for THIS interview
       setTimeout(() => {
-        router.push("/candidate/ai-mock-interview");
-      }, 3000);
+        router.push(
+          `/candidate/ai-mock-interview/result?interviewId=${encodeURIComponent(
+            effectiveInterviewId
+          )}`
+        );
+      }, 1200);
     } catch (err) {
       console.error("Submit error:", err);
-      alert("Failed to save results. Please try again.");
+      setError(err.message || "Failed to submit interview. Please try again.");
+      setStatus("ready");
+    } finally {
+      stopCamera();
+      stopSpeechRecognition();
+      setUploadProgress(null);
     }
   };
 
@@ -209,194 +350,254 @@ export default function LiveMockInterview() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  if (status === "setup") {
+  const disabled = status === "processing" || status === "complete";
+  const eyeContactScore = Math.round(eyeContactPercent || 0);
+
+  // PROCESSING screen
+  if (status === "processing") {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center max-w-sm">
-          <div className="text-6xl mb-6 animate-spin">⚙️</div>
-          <h2 className="text-2xl font-bold text-gray-900">Setting up your interview…</h2>
-          <p className="text-base text-gray-600 mt-4">
-            Please allow camera and microphone access to continue
-          </p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-white rounded-xl border p-12 text-center max-w-md">
+          <div className="text-6xl mb-4 animate-pulse">🤖</div>
+          <h2 className="text-2xl font-bold mb-2">AI is analyzing...</h2>
+          <p className="text-gray-600 mb-4">{processingStage}</p>
+
+          {uploadProgress !== null && (
+            <div className="w-full max-w-xs mx-auto mb-4">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-2 rounded-full bg-indigo-500 transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Upload progress: {uploadProgress}%
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2 text-sm text-gray-500">
+            <div>📊 Computing scores...</div>
+            <div>🎤 Analyzing speech...</div>
+            <div>👁️ Evaluating eye contact...</div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // COMPLETE screen – brief “done” state before redirect
   if (status === "complete") {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-12 text-center max-w-md">
-          <div className="text-7xl mb-6">🎉</div>
-          <h2 className="text-3xl font-bold text-gray-900">Interview Complete!</h2>
-          <p className="text-lg text-gray-600 mt-4">
-            Your responses are being analyzed. Redirecting to results…
-          </p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-white rounded-xl border p-12 text-center max-w-md">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-3xl font-bold mb-2">Interview Complete!</h2>
+          <p className="text-gray-600 mb-6">{processingStage}</p>
+          <div className="space-y-2 text-sm text-green-600">
+            <div>✅ Video uploaded to cloud</div>
+            <div>✅ AI analysis complete</div>
+            <div>✅ Scores calculated</div>
+            <div>➡ Redirecting you to the results page…</div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // MAIN UI
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-8 pb-8">
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">
-              Question {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length}
-            </h1>
-            <p className="text-lg text-gray-600 mt-2">
-              Answer clearly and confidently. You have up to 2 minutes.
-            </p>
-          </div>
-          <div
-            className={`text-5xl font-bold font-mono ${
-              timeLeft < 30 ? "text-red-600" : "text-indigo-600"
-            }`}
-          >
-            {isRecording ? formatTime(timeLeft) : "00:00"}
-          </div>
-        </div>
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900">AI Mock Interview</h1>
+        <p className="text-lg text-gray-600 mt-3">
+          Answer questions naturally while AI evaluates your performance
+        </p>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Video Feed (2 cols) */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-8">
-          <div className="relative bg-black rounded-xl overflow-hidden aspect-video mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* LEFT: video */}
+        <div className="bg-white rounded-xl border p-8">
+          <h2 className="text-2xl font-bold mb-4">Camera Preview</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Make sure your face is clearly visible. Maintain eye contact.
+          </p>
+
+          <div
+            className="relative bg-black rounded-xl overflow-hidden"
+            style={{ aspectRatio: "16/9" }}
+          >
             <video
               ref={videoRef}
               autoPlay
+              playsInline
               muted
               className="w-full h-full object-cover"
+              style={{ transform: "scaleX(-1)" }}
             />
 
-            {countdown > 0 && countdown < 4 && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-9xl font-black text-white drop-shadow-2xl animate-bounce">
-                  {countdown}
-                </div>
-              </div>
-            )}
-
             {isRecording && (
-              <div className="absolute top-6 left-6 flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg font-bold">
+              <div className="absolute top-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2">
                 <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
                 RECORDING
               </div>
             )}
-          </div>
 
-          {/* Controls */}
-          <div className="flex gap-4 justify-center">
-            {!isRecording ? (
-              <button
-                onClick={startRecording}
-                className="px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition-all"
-              >
-                🎤 Start Answer
-              </button>
-            ) : (
-              <button
-                onClick={handleStopRecording}
-                className="px-8 py-4 text-lg font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all"
-              >
-                ⏹️ Stop & Submit
-              </button>
+            {isRecording && (
+              <div className="absolute bottom-4 right-4 bg-green-500 text-white px-3 py-1 rounded-lg text-sm font-semibold">
+                👁️ {eyeContactScore > 70 ? "Good" : "OK"} Eye Contact
+              </div>
+            )}
+
+            {isRecording && (
+              <div className="absolute top-4 right-4 text-white text-3xl font-bold">
+                {formatTime(timeLeft)}
+              </div>
             )}
           </div>
+
+          {isRecording && transcript && (
+            <div className="mt-4 bg-gray-50 border rounded-lg p-4 max-h-24 overflow-auto">
+              <p className="text-xs text-gray-500 uppercase mb-1">
+                Live Transcript
+              </p>
+              <p className="text-sm">
+                {transcript.length > 200
+                  ? `${transcript.slice(-200)}...`
+                  : transcript}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Right: Question & Tips */}
+        {/* RIGHT: controls */}
         <div className="space-y-6">
-          {/* Question Card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-wide mb-3">
-              Your Question
-            </h3>
-            <p className="text-xl font-semibold text-gray-900 leading-relaxed">
-              {INTERVIEW_QUESTIONS[currentQuestion]}
+          <div className="bg-white rounded-xl border p-8">
+            <p className="text-sm font-semibold text-indigo-600 uppercase mb-2">
+              Question {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length}
             </p>
+            <h2 className="text-2xl font-bold mb-4">
+              {INTERVIEW_QUESTIONS[currentQuestion]}
+            </h2>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  isRecording ? "bg-red-500 animate-pulse" : "bg-gray-300"
+                }`}
+              />
+              <span className="text-sm font-medium">
+                {status === "running"
+                  ? "Recording in progress"
+                  : status === "ready"
+                  ? "Ready to start"
+                  : "Preparing..."}
+              </span>
+            </div>
+
+            {isRecording && (
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-indigo-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-indigo-600">
+                    {wordCount}
+                  </div>
+                  <div className="text-xs text-gray-600">Words</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {eyeContactScore}%
+                  </div>
+                  <div className="text-xs text-gray-600">Eye Contact</div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <button
+                onClick={startAnswer}
+                disabled={disabled || status === "running"}
+                className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+              >
+                {status === "running" ? "Recording..." : "🎤 Start Answer"}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (currentQuestion < INTERVIEW_QUESTIONS.length - 1) {
+                    setCurrentQuestion((idx) => idx + 1);
+                    setTimeLeft(QUESTION_TIME_LIMIT);
+                  } else {
+                    handleStopAndSubmit();
+                  }
+                }}
+                disabled={disabled || status !== "running"}
+                className="w-full px-6 py-3 border-2 border-gray-300 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-all"
+              >
+                {currentQuestion === INTERVIEW_QUESTIONS.length - 1
+                  ? "Finish Interview"
+                  : "Next Question →"}
+              </button>
+
+              <button
+                onClick={handleStopAndSubmit}
+                disabled={disabled}
+                className="w-full px-6 py-3 bg-gradient-to-r from-rose-500 to-red-600 text-white rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+              >
+                Stop & Submit
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+                {error}
+              </div>
+            )}
           </div>
 
-          {/* Tips Card */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 p-8">
-            <h4 className="text-lg font-bold text-gray-900 mb-4">💡 Interview Tips</h4>
-            <ul className="space-y-2 text-sm text-gray-700">
-              <li className="flex gap-2">
-                <span>👀</span> <span>Maintain eye contact with camera</span>
-              </li>
-              <li className="flex gap-2">
-                <span>🗣️</span> <span>Speak clearly at moderate pace</span>
-              </li>
-              <li className="flex gap-2">
-                <span>📖</span> <span>Use specific examples</span>
-              </li>
-              <li className="flex gap-2">
-                <span>⏱️</span> <span>Keep answers 1-2 minutes</span>
-              </li>
-              <li className="flex gap-2">
-                <span>😊</span> <span>Show enthusiasm & confidence</span>
-              </li>
+          <div className="bg-white rounded-xl border p-6">
+            <h3 className="font-bold mb-3">💡 Tips</h3>
+            <ul className="text-sm text-gray-600 space-y-2">
+              <li>• Maintain eye contact with camera</li>
+              <li>• Speak clearly at moderate pace</li>
+              <li>• Minimize filler words (um, uh, like)</li>
+              <li>• Use specific examples</li>
+              <li>• Show enthusiasm</li>
             </ul>
           </div>
 
-          {/* Progress Card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide mb-4">
-              📊 Progress
-            </h4>
+          <div className="bg-white rounded-xl border p-6">
+            <h3 className="font-bold mb-3">📊 Progress</h3>
             <div className="flex gap-2">
               {INTERVIEW_QUESTIONS.map((_, idx) => (
                 <div
                   key={idx}
-                  className="flex-1 h-3 rounded-full transition-all"
+                  className="flex-1 h-2 rounded"
                   style={{
                     background:
                       idx < currentQuestion
-                        ? "linear-gradient(90deg, #10b981, #34d399)"
+                        ? "#10b981"
                         : idx === currentQuestion
-                        ? "linear-gradient(90deg, #4f46e5, #6366f1)"
+                        ? "#3b82f6"
                         : "#e5e7eb",
                   }}
                 />
               ))}
             </div>
-            <p className="text-xs text-gray-600 mt-3 text-center">
-              {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length} questions
+            <p className="text-xs text-gray-500 mt-2">
+              {currentQuestion + 1} of {INTERVIEW_QUESTIONS.length} complete
             </p>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        @keyframes bounce {
-          0%, 100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.1);
-          }
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-        .animate-bounce {
-          animation: bounce 1s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
 
-LiveMockInterview.getLayout = (page) => (
-  <Layout role="CANDIDATE" active="ai-mock">
-    {page}
-  </Layout>
-);
+LiveMockInterview.getLayout = function getLayout(page) {
+  return (
+    <Layout role="CANDIDATE" active="ai-mock">
+      {page}
+    </Layout>
+  );
+};

@@ -98,7 +98,7 @@ export default function AIMockStart() {
   const finishInterview = async () => {
     setRecording(false);
 
-    // Dummy scoring (AI pipeline in Step 5)
+    // Dummy scoring (legacy practice flow)
     const fakeScores = {
       appearance: Math.floor(Math.random() * 30) + 70,
       language: Math.floor(Math.random() * 30) + 60,
@@ -108,7 +108,8 @@ export default function AIMockStart() {
     };
 
     try {
-      await fetch("/api/mock-interview", {
+      // Use the legacy Express endpoint
+      await fetch("/api/mock-interview-legacy", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -131,7 +132,9 @@ export default function AIMockStart() {
 
   return (
     <div className="space-y-6">
-      <h2 style={{ fontSize: 24, fontWeight: 800 }}>AI Mock Interview – Live Test</h2>
+      <h2 style={{ fontSize: 24, fontWeight: 800 }}>
+        AI Mock Interview – Live Test
+      </h2>
 
       <div
         style={{
@@ -155,8 +158,15 @@ export default function AIMockStart() {
             }}
           />
 
-          <div style={{ marginTop: 10, fontSize: 14, color: "var(--muted)" }}>
-            Camera Status: <span style={{ color: "#4ade80" }}>Active</span>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 14,
+              color: "var(--muted)",
+            }}
+          >
+            Camera Status:{" "}
+            <span style={{ color: "#4ade80" }}>Active</span>
           </div>
 
           <div style={{ marginTop: 10 }}>

@@ -508,7 +508,7 @@ textarea:focus {
   color: #111827;
 }
 
-/* shared sidebar link style – BIGGER + FILLED */
+/* ============ Sidebar Link Styles - FIXED ACTIVE STATE ============ */
 .side-link,
 .sidebar-link,
 .nav-item {
@@ -530,24 +530,42 @@ textarea:focus {
     color 0.12s ease,
     box-shadow 0.12s ease;
 }
+
 .side-link svg,
 .sidebar-link svg,
 .nav-item svg {
   flex-shrink: 0;
 }
+
 .side-link:hover,
 .sidebar-link:hover,
 .nav-item:hover {
   background: #e5e7ff;
   color: #111827;
 }
+
+/* ✅ ACTIVE STATE - Enhanced with !important to override any conflicts */
 .side-link.active,
 .sidebar-link.active,
 .nav-item.active {
-  background: linear-gradient(90deg, var(--brand), var(--brand-soft));
-  color: white;
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.35);
-  border-color: transparent;
+  background: linear-gradient(90deg, #4f46e5, #6366f1) !important;
+  color: white !important;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.35) !important;
+  border-color: transparent !important;
+}
+
+/* Ensure icons are white in active state */
+.side-link.active svg,
+.sidebar-link.active svg,
+.nav-item.active svg {
+  color: white !important;
+}
+
+/* Ensure text/span is white in active state */
+.side-link.active span,
+.sidebar-link.active span,
+.nav-item.active span {
+  color: white !important;
 }
 
 .page-content {
@@ -805,4 +823,17 @@ html {
 
 /* spinner placeholder */
 .spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(79, 70, 229, 0.3);
+  border-radius: 50%;
+  border-top-color: #4f46e5;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

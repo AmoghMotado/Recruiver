@@ -50,7 +50,7 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
       icon: FileText,
     },
     {
-      id: "mock",
+      id: "mock-test",  // ✅ Changed from "mock" to "mock-test"
       href: "/candidate/mock-aptitude",
       label: "Mock Test",
       icon: PenSquare,
@@ -145,9 +145,11 @@ export default function Sidebar({ role = "CANDIDATE", active }) {
           {links.map((link) => {
             const Icon = link.icon;
 
+            // Enhanced active state detection for mock-test
             const isActive =
               active === link.id ||
               (link.id === "jobs" && active === "job-profiles") ||
+              (link.id === "mock-test" && (active === "mock-test" || active === "mock-aptitude" || active === "mock")) ||
               path === link.href ||
               (typeof path === "string" && path.startsWith(link.href));
 

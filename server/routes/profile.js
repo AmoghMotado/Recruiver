@@ -1,13 +1,13 @@
 // server/routes/profile.js
 const express = require("express");
-const { db } = require("../lib/firebaseAdmin");
+const { db } = require("../lib/firebaseAdmin"); // adjust path if needed
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
 /**
  * GET /api/profile/candidate
- * Returns current user's basic profile
+ * Returns current user's basic profile + candidate sections
  */
 router.get("/candidate", requireAuth, async (req, res) => {
   try {
@@ -23,13 +23,14 @@ router.get("/candidate", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const data = docSnap.data();
+    const data = docSnap.data() || {};
 
-    const profile = {
+    // What the profile page expects as `data.user`
+    const user = {
       id: docSnap.id,
       firstName: data.firstName || "",
       lastName: data.lastName || "",
-      email: data.email,
+      email: data.email || "",
       phone: data.phone || "",
       dob: data.dob || "",
       gender: data.gender || "",
@@ -37,11 +38,21 @@ router.get("/candidate", requireAuth, async (req, res) => {
       college: data.college || "",
       course: data.course || "",
       cgpa: data.cgpa || "",
-      skills: data.skills || [],
       resumeUrl: data.resumeUrl || "",
     };
 
-    return res.json({ user: profile });
+    // What the profile page expects as `data.candidate`
+    const candidate = {
+      headline: data.headline || "",
+      summary: data.summary || "",
+      skills: Array.isArray(data.skills) ? data.skills : [],
+      education: Array.isArray(data.education) ? data.education : [],
+      experience: Array.isArray(data.experience) ? data.experience : [],
+      projects: Array.isArray(data.projects) ? data.projects : [],
+      links: Array.isArray(data.links) ? data.links : [],
+    };
+
+    return res.json({ user, candidate });
   } catch (err) {
     console.error("/api/profile/candidate GET error (Firebase):", err);
     return res.status(500).json({ error: "Server error" });
@@ -59,17 +70,27 @@ router.put("/candidate", requireAuth, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Fields we allow the frontend to update
     const allowedFields = [
       "firstName",
       "lastName",
+      "email",
       "phone",
       "dob",
       "gender",
       "college",
       "course",
       "cgpa",
-      "skills",
       "resumeUrl",
+
+      // Candidate-specific sections
+      "headline",
+      "summary",
+      "skills",
+      "education",
+      "experience",
+      "projects",
+      "links",
     ];
 
     const updates = {};

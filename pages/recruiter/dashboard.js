@@ -3,8 +3,16 @@ import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import JobPostingsTable from "@/components/recruiter/JobPostingsTable";
 import CandidatesTable from "@/components/recruiter/CandidatesTable";
-import AnalyticsPanel from "@/components/recruiter/AnalyticsPanel";
+import RealTimeDataPanel from "@/components/recruiter/RealTimeDataPanel";
 import CalendarWidget from "@/components/recruiter/CalendarWidget";
+import { 
+  Users, 
+  Briefcase, 
+  CheckCircle, 
+  Calendar,
+  Plus,
+  ArrowRight
+} from "lucide-react";
 
 function mapServerJobToTable(job) {
   return {
@@ -30,17 +38,29 @@ function RecruiterDashboard() {
   const [loadingApplicants, setLoadingApplicants] = useState(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [filters, setFilters] = useState({ q: "", status: "All", minScore: 0 });
+  
+  // FIX 1: Initialize atsScores as an empty object. This prevents reading properties of undefined/null.
+  const [atsScores, setAtsScores] = useState({}); 
 
   const loadJobs = async () => {
     setLoadingJobs(true);
     try {
-      const res = await fetch("/api/jobs/my");
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Failed to load jobs");
+      const res = await fetch("/api/jobs/my", {
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        console.warn("Jobs API returned:", res.status);
+        setJobs([]);
+        return;
+      }
+
+      const data = await res.json().catch(() => ({ jobs: [] }));
       const mapped = (data.jobs || []).map(mapServerJobToTable);
       setJobs(mapped);
     } catch (e) {
-      console.error(e);
+      console.error("Error loading jobs:", e);
+      setJobs([]);
     } finally {
       setLoadingJobs(false);
     }
@@ -49,12 +69,44 @@ function RecruiterDashboard() {
   const loadApplicants = async () => {
     setLoadingApplicants(true);
     try {
-      const res = await fetch("/api/jobs/applicants");
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Failed to load applicants");
-      setApplicants(data.applicants || []);
+      // ✅ USE SAME ENDPOINT AS CANDIDATES PAGE
+      const res = await fetch("/api/jobs/recruiter-candidates", {
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        console.warn("Applicants API returned:", res.status);
+        setApplicants([]);
+        return;
+      }
+
+      const data = await res.json().catch(() => ({ candidates: [] }));
+      
+      // ✅ TRANSFORM candidates → applicants format
+      const applicants = (data.candidates || []).map((c) => ({
+        id: c.applicationId || c.id,
+        applicationId: c.applicationId || c.id,
+        name: c.name || "Unknown",
+        email: c.email || "",
+        jobTitle: c.jobTitle || "",
+        company: c.company || "",
+        status: c.status || "APPLIED",
+        score: c.score || 0,
+        aptitudeScore: c.aptitudeScore || null,
+        videoInterviewScore: c.videoInterviewScore || null,
+        appliedDate: c.appliedDate || c.createdAt,
+        resumePath: c.resumePath || null,
+        stage: c.stage || 0,
+      }));
+      
+      setApplicants(applicants);
+      
+      // NOTE: In a real app, you would fetch and populate setAtsScores({}) here, 
+      // keyed by application ID or email.
+      
     } catch (e) {
-      console.error(e);
+      console.error("Error loading applicants:", e);
+      setApplicants([]);
     } finally {
       setLoadingApplicants(false);
     }
@@ -69,7 +121,7 @@ function RecruiterDashboard() {
     applicants: applicants.length || 0,
     jobs: jobs.length || 0,
     shortlisted:
-      applicants.filter((a) => a.status === "Shortlisted").length || 0,
+      applicants.filter((a) => a.status === "SHORTLISTED").length || 0,
     events: 8,
   };
 
@@ -91,7 +143,11 @@ function RecruiterDashboard() {
   };
 
   const handleViewResume = (candidate) => {
-    alert(`View resume for ${candidate.name} (stub)`);
+    if (!candidate.resumePath) {
+      alert("No resume uploaded for this candidate.");
+      return;
+    }
+    window.open(candidate.resumePath, "_blank");
   };
 
   const handleChangeStatus = (id, newStatus) => {
@@ -129,137 +185,62 @@ function RecruiterDashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-8">
-      {/* KPI Stats Cards - 4 Columns */}
+    <div className="space-y-8 pb-12 pt-6">
+      
+      {/* KPI Stats Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Total Applicants */}
-        <div className="bg-white rounded-xl p-8 border border-gray-200 hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Total Applicants
-          </div>
-          <div className="text-5xl font-bold text-gray-900 mt-4">
-            {loadingApplicants ? (
-              <span className="text-gray-300">--</span>
-            ) : (
-              totals.applicants
-            )}
-          </div>
-          <p className="mt-3 text-sm text-gray-600 font-medium">
-            Candidates applied across all jobs
-          </p>
-          <a
-            href="/recruiter/candidates"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            View All →
-          </a>
-        </div>
-
-        {/* Active Job Posts */}
-        <div className="bg-white rounded-xl p-8 border border-gray-200 hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Active Job Posts
-          </div>
-          <div className="text-5xl font-bold text-gray-900 mt-4">
-            {loadingJobs ? (
-              <span className="text-gray-300">--</span>
-            ) : (
-              totals.jobs
-            )}
-          </div>
-          <p className="mt-3 text-sm text-gray-600 font-medium">
-            Open positions available
-          </p>
-          <a
-            href="/recruiter/jobs"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            Manage Jobs →
-          </a>
-        </div>
-
-        {/* Shortlisted Candidates */}
-        <div className="bg-white rounded-xl p-8 border border-gray-200 hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Shortlisted Candidates
-          </div>
-          <div className="text-5xl font-bold text-gray-900 mt-4">
-            {loadingApplicants ? (
-              <span className="text-gray-300">--</span>
-            ) : (
-              totals.shortlisted
-            )}
-          </div>
-          <p className="mt-3 text-sm text-gray-600 font-medium">
-            Ready for interview stage
-          </p>
-          <a
-            href="/recruiter/candidates"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            Review Candidates →
-          </a>
-        </div>
-
-        {/* Upcoming Events */}
-        <div className="bg-white rounded-xl p-8 border border-gray-200 hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Upcoming Events
-          </div>
-          <div className="text-5xl font-bold text-gray-900 mt-4">
-            {totals.events}
-          </div>
-          <p className="mt-3 text-sm text-gray-600 font-medium">
-            Scheduled interviews & meetings
-          </p>
-          <a
-            href="/recruiter/calendar"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            View Calendar →
-          </a>
-        </div>
+        <KPICard 
+          title="Total Applicants" 
+          value={loadingApplicants ? "--" : totals.applicants}
+          sub="Candidates applied"
+          icon={<Users className="w-6 h-6 text-indigo-600" />}
+          color="border-l-4 border-indigo-500"
+          href="/recruiter/candidates"
+        />
+        <KPICard 
+          title="Active Jobs" 
+          value={loadingJobs ? "--" : totals.jobs}
+          sub="Open positions"
+          icon={<Briefcase className="w-6 h-6 text-blue-600" />}
+          color="border-l-4 border-blue-500"
+          href="/recruiter/jobs"
+        />
+        <KPICard 
+          title="Shortlisted" 
+          value={loadingApplicants ? "--" : totals.shortlisted}
+          sub="Ready for interview"
+          icon={<CheckCircle className="w-6 h-6 text-emerald-600" />}
+          color="border-l-4 border-emerald-500"
+          href="/recruiter/candidates"
+        />
+        <KPICard 
+          title="Upcoming Events" 
+          value={totals.events}
+          sub="Scheduled meetings"
+          icon={<Calendar className="w-6 h-6 text-purple-600" />}
+          color="border-l-4 border-purple-500"
+          href="/recruiter/calendar"
+        />
       </section>
 
-      {/* Main Content Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Jobs & Candidates */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Job Postings Table */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* LEFT COLUMN (Main Content) */}
+        <div className="lg:col-span-2 space-y-8">
+          
+          {/* Candidates Table Section */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Job Postings
-                </h2>
-                <p className="text-base text-gray-600 mt-1">
-                  Manage your open positions
-                </p>
+                <h2 className="text-xl font-bold text-gray-900">Recent Candidates</h2>
+                <p className="text-sm text-gray-500 mt-1">Review and manage new applications</p>
               </div>
-              <button
-                onClick={() => (location.href = "/recruiter/jobs")}
-                className="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:shadow-lg transition"
+              <a 
+                href="/recruiter/candidates" 
+                className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
               >
-                + Post New Job
-              </button>
-            </div>
-
-            <JobPostingsTable
-              jobs={jobs}
-              loading={loadingJobs}
-              onAddJob={() => (location.href = "/recruiter/jobs")}
-              onEditJob={() => (location.href = "/recruiter/jobs")}
-              onDeleteJob={() => (location.href = "/recruiter/jobs")}
-            />
-          </div>
-
-          {/* Candidates Table */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Candidates</h2>
-              <p className="text-base text-gray-600 mt-1">
-                Review and manage your applicants
-              </p>
+                View All <ArrowRight className="w-4 h-4" />
+              </a>
             </div>
 
             <CandidatesTable
@@ -273,28 +254,83 @@ function RecruiterDashboard() {
               onBulk={handleBulk}
               filters={filters}
               setFilters={setFilters}
+              // Pass the initialized atsScores object
+              atsScores={atsScores} 
             />
           </div>
+
+          {/* Job Postings Table Section */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Active Job Postings</h2>
+                <p className="text-sm text-gray-500 mt-1">Manage your open roles</p>
+              </div>
+              <button
+                onClick={() => (location.href = "/recruiter/jobs")}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-md hover:shadow-lg"
+              >
+                <Plus className="w-4 h-4" /> Post New Job
+              </button>
+            </div>
+
+            <JobPostingsTable
+              jobs={jobs}
+              loading={loadingJobs}
+              onAddJob={() => (location.href = "/recruiter/jobs")}
+              onEditJob={() => (location.href = "/recruiter/jobs")}
+              onDeleteJob={() => (location.href = "/recruiter/jobs")}
+            />
+          </div>
+
         </div>
 
-        {/* Right Column - Analytics & Calendar */}
-        <div className="space-y-6">
-          {/* Analytics Panel */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              AI & Analytics
+        {/* RIGHT COLUMN (Sidebar) */}
+        <div className="space-y-8">
+          
+          {/* Real-Time Activity Panel */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>
+              Live Activity
             </h2>
-            <AnalyticsPanel />
+            <RealTimeDataPanel 
+              applicants={applicants}
+              jobs={jobs}
+              loading={loadingApplicants || loadingJobs}
+            />
           </div>
 
           {/* Calendar Widget */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Calendar</h2>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Schedule</h2>
             <CalendarWidget />
           </div>
+          
         </div>
       </div>
     </div>
+  );
+}
+
+// Helper Component for KPI Cards
+function KPICard({ title, value, sub, icon, color, href }) {
+  return (
+    <a 
+      href={href} 
+      className={`bg-white rounded-2xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 group ${color}`}
+    >
+      <div className="flex justify-between items-start mb-4">
+        <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors">
+          {icon}
+        </div>
+      </div>
+      <div>
+        <div className="text-4xl font-extrabold text-gray-900 tracking-tight">{value}</div>
+        <div className="font-bold text-gray-700 mt-1">{title}</div>
+        <div className="text-sm text-gray-400 mt-1 font-medium">{sub}</div>
+      </div>
+    </a>
   );
 }
 

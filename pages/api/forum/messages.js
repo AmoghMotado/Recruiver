@@ -1,18 +1,12 @@
 // ============================================
 // FILE: pages/api/forum/messages.js
+// Forum API using Firebase Admin (same as server)
 // ============================================
-import { db, Timestamp } from "@/lib/firebase";
-import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  limit,
-  getDocs,
-} from "firebase/firestore";
+
+import { admin, db } from "../../../server/lib/firebaseAdmin"; // ✅ use existing Admin SDK
 
 export default async function handler(req, res) {
-  // Set CORS headers
+  // CORS headers (for safety – Next API is same origin, but keep it)
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader(
@@ -24,25 +18,26 @@ export default async function handler(req, res) {
     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   );
 
-  // Handle preflight
   if (req.method === "OPTIONS") {
     res.status(200).end();
     return;
   }
 
-  // GET: Fetch all messages
+  /* ============ GET: Fetch messages ============ */
   if (req.method === "GET") {
     try {
-      const messagesRef = collection(db, "forumMessages");
+      const messagesRef = db.collection("forumMessages");
 
       try {
-        const q = query(messagesRef, orderBy("createdAt", "desc"), limit(100));
+        const snap = await messagesRef
+          .orderBy("createdAt", "desc")
+          .limit(100)
+          .get();
 
-        const querySnapshot = await getDocs(q);
         const messages = [];
 
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
+        snap.forEach((doc) => {
+          const data = doc.data() || {};
           messages.push({
             id: doc.id,
             content: data.content || "",
@@ -55,85 +50,71 @@ export default async function handler(req, res) {
           });
         });
 
-        // Reverse to show oldest first
+        // oldest → newest for UI
         messages.reverse();
 
         return res.status(200).json({
-          messages,
           success: true,
+          messages,
         });
       } catch (queryError) {
-        console.log("Query error:", queryError.message);
-        // Return empty array if collection doesn't exist
+        console.log("Forum query error:", queryError.message);
+        // If collection missing → just return empty list
         return res.status(200).json({
-          messages: [],
           success: true,
+          messages: [],
         });
       }
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Error fetching forum messages:", error);
       return res.status(500).json({
+        success: false,
         message: "Failed to fetch messages",
         error: error.message,
-        success: false,
       });
     }
   }
 
-  // POST: Create new message
+  /* ============ POST: Create message ============ */
   if (req.method === "POST") {
     try {
-      console.log("=== RECEIVED POST REQUEST ===");
-      console.log("Request body:", req.body);
+      const { content, authorId, authorName, authorEmail } = req.body || {};
 
-      const { content, authorId, authorName, authorEmail } = req.body;
-
-      // Validate input
       if (!content || !content.trim()) {
-        return res.status(400).json({
-          message: "Message content is required",
-          success: false,
-        });
+        return res
+          .status(400)
+          .json({ success: false, message: "Message content is required" });
       }
 
       if (content.trim().length > 1000) {
         return res.status(400).json({
-          message: "Message is too long (max 1000 characters)",
           success: false,
+          message: "Message is too long (max 1000 characters)",
         });
       }
 
       const finalAuthorId = String(authorId || "anonymous");
-      const finalAuthorName = String(authorName || "Anonymous");
+      const finalAuthorName = String(
+        authorName || authorEmail || "Anonymous User"
+      );
       const finalAuthorEmail = String(authorEmail || "");
 
-      console.log("Validated data:", {
-        content: content.trim(),
-        authorId: finalAuthorId,
-        authorName: finalAuthorName,
-        authorEmail: finalAuthorEmail,
-      });
+      const ts = admin.firestore.FieldValue.serverTimestamp();
 
-      // Prepare message data
       const messageData = {
         content: content.trim(),
         authorId: finalAuthorId,
         authorName: finalAuthorName,
         authorEmail: finalAuthorEmail,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: ts,
+        updatedAt: ts,
         likes: 0,
       };
 
-      console.log("Attempting to add to Firestore:", messageData);
+      const messagesRef = db.collection("forumMessages");
+      const docRef = await messagesRef.add(messageData);
 
-      // Add to Firestore
-      const messagesRef = collection(db, "forumMessages");
-      const docRef = await addDoc(messagesRef, messageData);
-
-      console.log("Success! Message saved with ID:", docRef.id);
-
-      // Return response
+      // Return a client-friendly object
       const responseMessage = {
         id: docRef.id,
         content: content.trim(),
@@ -146,38 +127,31 @@ export default async function handler(req, res) {
       };
 
       return res.status(201).json({
-        message: responseMessage,
         success: true,
+        message: responseMessage,
       });
     } catch (error) {
-      console.error("ERROR creating message:", error);
-      console.error("Error name:", error.name);
-      console.error("Error code:", error.code);
-      console.error("Error message:", error.message);
+      console.error("ERROR creating forum message:", error);
 
-      // Return specific error based on error type
-      let errorMsg = error.message;
-
+      let errorMsg = error.message || "Unknown error";
       if (error.code === "permission-denied") {
-        errorMsg =
-          "Permission denied. Check Firestore security rules.";
+        errorMsg = "Permission denied. Check Firestore security rules.";
       } else if (error.code === "unauthenticated") {
         errorMsg = "Authentication required.";
-      } else if (error.message && error.message.includes("offline")) {
-        errorMsg = "You appear to be offline.";
       }
 
       return res.status(500).json({
+        success: false,
         message: "Failed to create message",
         error: errorMsg,
         code: error.code || "UNKNOWN",
-        success: false,
       });
     }
   }
 
+  // Anything else
   return res.status(405).json({
-    message: "Method not allowed",
     success: false,
+    message: "Method not allowed",
   });
 }

@@ -1,4 +1,6 @@
-// pages/recruiter/candidates.js
+// ============================================
+// FILE 2: pages/recruiter/candidates.js
+// ============================================
 import { useEffect, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CandidatesTable from "@/components/recruiter/CandidatesTable";
@@ -19,9 +21,6 @@ function RecruiterCandidatesPage() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const pollRef = useRef(null);
 
-  // ---------------------------------------------------------------------------
-  // Load candidates
-  // ---------------------------------------------------------------------------
   const loadCandidates = async () => {
     setLoading(true);
     try {
@@ -36,7 +35,6 @@ function RecruiterCandidatesPage() {
 
       const baseRows = data.candidates || [];
 
-      // Merge ATS scores if already loaded
       const merged = baseRows.map((c) => {
         const scoreData = atsScores[c.email];
         return scoreData
@@ -56,9 +54,6 @@ function RecruiterCandidatesPage() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Load ATS scores
-  // ---------------------------------------------------------------------------
   const loadATSScores = async () => {
     setLoadingScores(true);
     try {
@@ -74,7 +69,6 @@ function RecruiterCandidatesPage() {
       const scores = data.scores || {};
       setAtsScores(scores);
 
-      // Merge into rows to compute avg etc
       setRows((prev) =>
         prev.map((row) => {
           const scoreData = scores[row.email];
@@ -94,12 +88,10 @@ function RecruiterCandidatesPage() {
     }
   };
 
-  // Initial load
   useEffect(() => {
     loadCandidates();
   }, []);
 
-  // Initial ATS load + polling every 10s
   useEffect(() => {
     loadATSScores();
     pollRef.current = setInterval(() => {
@@ -110,9 +102,6 @@ function RecruiterCandidatesPage() {
     };
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Selection + Status updates
-  // ---------------------------------------------------------------------------
   const handleToggle = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -131,28 +120,6 @@ function RecruiterCandidatesPage() {
       });
       return next;
     });
-  };
-
-  const updateStatus = async (applicationId, status) => {
-    try {
-      const res = await fetch(
-        `/api/jobs/applications/${applicationId}/status`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
-        }
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to update application");
-      }
-      await loadCandidates();
-    } catch (err) {
-      console.error("Update status error:", err);
-      alert(err.message || "Failed to update application");
-    }
   };
 
   const handleBulk = async (action) => {
@@ -191,13 +158,33 @@ function RecruiterCandidatesPage() {
     window.open(candidate.resumePath, "_blank");
   };
 
-  // ---------------------------------------------------------------------------
-  // Stats & filters
-  // ---------------------------------------------------------------------------
+  const advanceApplication = async (applicationId, action, extra = {}) => {
+    try {
+      const res = await fetch(
+        `/api/jobs/applications/${applicationId}/advance`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...extra }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to advance application");
+      }
+      await loadCandidates();
+    } catch (err) {
+      console.error("advanceApplication error:", err);
+      alert(err.message || "Failed to update application");
+    }
+  };
+
   const total = rows.length;
   const applied = rows.filter((r) => r.status === "APPLIED").length;
   const underReview = rows.filter((r) => r.status === "UNDER_REVIEW").length;
   const shortlisted = rows.filter((r) => r.status === "SHORTLISTED").length;
+  const hrScheduled = rows.filter((r) => r.status === "HR_SCHEDULED").length;
 
   const scored = rows.filter((r) => r.score && r.score > 0);
   const avgScore =
@@ -225,17 +212,7 @@ function RecruiterCandidatesPage() {
   });
 
   return (
-    <div className="space-y-10 pb-10">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
-          Candidates <span className="text-2xl">👥</span>
-        </h1>
-        <p className="text-gray-600 mt-2 text-lg">
-          Review and manage your applicants with real-time ATS insight.
-        </p>
-      </div>
-
+    <div className="space-y-8 pb-10">
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <SummaryCard label="Total Candidates" value={total} icon="👥" />
@@ -248,10 +225,10 @@ function RecruiterCandidatesPage() {
           icon="✅"
         />
         <SummaryCard
-          label="Avg ATS Score"
-          value={scored.length ? `${avgScore}%` : "N/A"}
-          accent="text-indigo-600"
-          icon="🤖"
+          label="HR Scheduled"
+          value={hrScheduled}
+          accent="text-purple-600"
+          icon="📅"
         />
       </div>
 
@@ -259,9 +236,9 @@ function RecruiterCandidatesPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm hover:shadow-lg transition-shadow">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">All Candidates</h2>
+            <h2 className="text-xl font-bold text-gray-900">Candidates</h2>
             <p className="text-xs text-gray-600 mt-1">
-              Search, filter, and generate ATS scores inline.
+              Review and manage your applicants with real-time insights
             </p>
           </div>
           <div className="flex gap-2">
@@ -317,6 +294,7 @@ function RecruiterCandidatesPage() {
               <option value="APPLIED">Applied</option>
               <option value="UNDER_REVIEW">Under Review</option>
               <option value="SHORTLISTED">Shortlisted</option>
+              <option value="HR_SCHEDULED">HR Scheduled</option>
               <option value="REJECTED">Rejected</option>
             </select>
           </div>
@@ -345,7 +323,7 @@ function RecruiterCandidatesPage() {
           {scored.length > 0 && (
             <span className="ml-2">
               • <span className="font-semibold">{scored.length}</span> with ATS
-              scores
+              scores (avg {avgScore}%)
             </span>
           )}
         </div>
@@ -388,9 +366,10 @@ function RecruiterCandidatesPage() {
         selectedIds={selectedIds}
         onToggle={handleToggle}
         onToggleAll={handleToggleAll}
-        onChangeStatus={updateStatus}
         onViewResume={handleViewResume}
         atsScores={atsScores}
+        onRefresh={loadCandidates}
+        onAdvanceApplication={advanceApplication}
       />
     </div>
   );

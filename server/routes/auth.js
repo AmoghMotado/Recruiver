@@ -3,7 +3,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { db } = require("../lib/firebaseAdmin");
-
+const router = express.Router();
 // ---- Robust fetch polyfill (works with node-fetch v2/v3 or Node18 global) ----
 let fetchImpl = global.fetch;
 if (!fetchImpl) {
@@ -12,7 +12,7 @@ if (!fetchImpl) {
 }
 const fetch = (...args) => fetchImpl(...args);
 
-const router = express.Router();
+
 
 // ---------- Google config ----------
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

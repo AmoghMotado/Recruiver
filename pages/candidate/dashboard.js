@@ -1,21 +1,27 @@
 // pages/candidate/dashboard.js
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
+import { 
+  Briefcase, 
+  FileText, 
+  ArrowRight, 
+  Zap, 
+  MessageSquare, 
+  Search,
+  TrendingUp,
+  Target
+} from "lucide-react";
 
 function Skeleton({ height = 120 }) {
   return (
     <div
-      className="card"
+      className="rounded-2xl bg-white/50 border border-white/60"
       style={{
-        padding: 20,
         height,
-        background:
-          "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 37%, rgba(255,255,255,0.03) 63%)",
+        background: "linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%)",
         backgroundSize: "400% 100%",
         animation: "shimmer 1.4s ease infinite",
-        borderRadius: 16,
       }}
-      aria-hidden
     />
   );
 }
@@ -75,376 +81,224 @@ function CandidateDashboard() {
 
   const appliedJobIds = new Set(applications.map((app) => app.jobId));
   const recommendedJobs = jobs.filter((job) => !appliedJobIds.has(job.id));
-
-  const applicationsCount = applications.length;
   const mockAttempts = mockSummary?.totalAttempts || 0;
 
   return (
-    <div className="space-y-8 pb-8">
-      {/* Top KPI Row - 4 Columns */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Resume ATS */}
-        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Resume ATS Score
-          </div>
-          <div className="mt-2 flex items-end justify-between">
-            <div className="flex flex-col">
-              <div className="text-5xl font-bold text-gray-900">
-                {loading ? (
-                  <span className="text-gray-300">--</span>
-                ) : (
-                  <>
-                    {atsScore}
-                    <span className="text-2xl opacity-70 font-semibold">%</span>
-                  </>
-                )}
+    <div className="pb-12 space-y-8">
+      
+      {/* Welcome Hero */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900 to-purple-900 rounded-3xl p-10 text-white shadow-2xl">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold mb-2">Welcome back! 👋</h1>
+          <p className="text-indigo-200 text-lg opacity-90 max-w-xl">
+            Track your applications, optimize your resume, and prepare for interviews all in one place.
+          </p>
+        </div>
+      </div>
+
+      {/* Key Metrics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard 
+          label="ATS Score" 
+          value={`${atsScore}%`} 
+          desc="Resume Strength" 
+          icon={<FileText className="w-6 h-6 text-white"/>} 
+          color="bg-blue-500" 
+          href="/candidate/resume-ats"
+        />
+        <MetricCard 
+          label="Applications" 
+          value={applications.length} 
+          desc="Active Processes" 
+          icon={<Briefcase className="w-6 h-6 text-white"/>} 
+          color="bg-purple-500" 
+          href="/candidate/job-profiles"
+        />
+        <MetricCard 
+          label="Mock Tests" 
+          value={mockAttempts} 
+          desc="Interviews Taken" 
+          icon={<MessageSquare className="w-6 h-6 text-white"/>} 
+          color="bg-pink-500" 
+          href="/candidate/ai-mock-interview"
+        />
+        <MetricCard 
+          label="Profile" 
+          value="85%" 
+          desc="Completeness" 
+          icon={<Target className="w-6 h-6 text-white"/>} 
+          color="bg-orange-500" 
+          href="/candidate/profile"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Main Content Column */}
+        <div className="lg:col-span-2 space-y-8">
+          
+          {/* Recommended Jobs */}
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-yellow-500 fill-current" />
+                  Recommended For You
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">Based on your skills and preferences</p>
               </div>
-              <p className="mt-3 text-sm text-gray-600 font-medium">
-                Optimise for better matches
-              </p>
-            </div>
-          </div>
-          <a
-            href="/candidate/resume-ats"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            View Analysis →
-          </a>
-        </div>
-
-        {/* Applications */}
-        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Applications
-          </div>
-          <div className="mt-2 flex items-end justify-between">
-            <div className="flex flex-col">
-              <div className="text-5xl font-bold text-gray-900">
-                {loading ? (
-                  <span className="text-gray-300">--</span>
-                ) : (
-                  applicationsCount
-                )}
-              </div>
-              <p className="mt-3 text-sm text-gray-600 font-medium">
-                Jobs applied so far
-              </p>
-            </div>
-          </div>
-          <a
-            href="/candidate/job-profiles"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            View All →
-          </a>
-        </div>
-
-        {/* Recommended Jobs */}
-        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Recommended Jobs
-          </div>
-          <div className="mt-2 flex items-end justify-between">
-            <div className="flex flex-col">
-              <div className="text-5xl font-bold text-gray-900">
-                {loading ? (
-                  <span className="text-gray-300">--</span>
-                ) : (
-                  recommendedJobs.length
-                )}
-              </div>
-              <p className="mt-3 text-sm text-gray-600 font-medium">
-                Matching your profile
-              </p>
-            </div>
-          </div>
-          <a
-            href="/candidate/job-profiles"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            Browse Jobs →
-          </a>
-        </div>
-
-        {/* Mock Interviews */}
-        <div className="card p-8 flex flex-col justify-between hover:shadow-lg transition-shadow">
-          <div className="text-xs font-bold tracking-[0.2em] uppercase text-gray-500 mb-2">
-            Mock Interviews
-          </div>
-          <div className="mt-2 flex items-end justify-between">
-            <div className="flex flex-col">
-              <div className="text-5xl font-bold text-gray-900">
-                {loading ? (
-                  <span className="text-gray-300">--</span>
-                ) : (
-                  mockAttempts
-                )}
-              </div>
-              <p className="mt-3 text-sm text-gray-600 font-medium">
-                Practice attempts
-              </p>
-            </div>
-          </div>
-          <a
-            href="/candidate/ai-mock-interview"
-            className="mt-4 text-sm font-bold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            View Attempts →
-          </a>
-        </div>
-      </section>
-
-      {/* Main Content - 2 Columns */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recommended Jobs - Larger Card */}
-        <div className="lg:col-span-2 card p-8 flex flex-col gap-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">
-                Recommended Opportunities
-              </h2>
-              <p className="text-base text-gray-600 mt-1">
-                Roles aligned with your skills and experience
-              </p>
-            </div>
-            <a
-              href="/candidate/job-profiles"
-              className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition whitespace-nowrap"
-            >
-              View All Jobs →
-            </a>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {loading ? (
-              [1, 2, 3].map((k) => <Skeleton key={k} height={100} />)
-            ) : recommendedJobs.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50/50 rounded-xl">
-                <p className="text-lg text-gray-600 font-medium">
-                  No new jobs available right now
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Check back soon for opportunities
-                </p>
-              </div>
-            ) : (
-              recommendedJobs.slice(0, 5).map((job) => (
-                <div
-                  key={job.id}
-                  className="flex items-center justify-between rounded-xl border border-gray-200 px-6 py-5 bg-white/80 hover:bg-white hover:border-indigo-200 transition"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-lg font-bold text-gray-900 truncate">
-                      {job.title}
-                    </div>
-                    <div className="text-base text-gray-600 truncate mt-1">
-                      {job.company || "Company Name"}
-                    </div>
-                  </div>
-                  <a
-                    href="/candidate/job-profiles"
-                    className="ml-4 px-5 py-2.5 text-sm font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition whitespace-nowrap"
-                  >
-                    View Job
-                  </a>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* My Applications */}
-        <div className="card p-8 flex flex-col gap-4">
-          <div className="mb-2">
-            <h2 className="text-2xl font-bold text-gray-900">
-              My Applications
-            </h2>
-            <p className="text-base text-gray-600 mt-1">
-              Track your application progress
-            </p>
-          </div>
-
-          {loading ? (
-            <>
-              <Skeleton height={90} />
-              <Skeleton height={90} />
-              <Skeleton height={90} />
-            </>
-          ) : applications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 bg-gray-50/50 rounded-xl">
-              <p className="text-lg text-gray-600 font-medium">
-                No applications yet
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                Start exploring opportunities
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {applications.slice(0, 6).map((app) => (
-                <div
-                  key={app.id}
-                  className="rounded-xl border border-gray-200 px-5 py-4 bg-white/80 hover:bg-white hover:border-indigo-200 transition"
-                >
-                  <div className="text-base font-bold text-gray-900 truncate">
-                    {app.job?.title || "Job"}
-                  </div>
-                  <div className="mt-2 text-sm text-gray-600 flex justify-between">
-                    <span className="truncate font-medium">
-                      {app.job?.company || "Company"}
-                    </span>
-                    <span className="text-gray-500">
-                      {new Date(app.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Bottom Section - Features */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Mock Interview Feature */}
-        <div className="card p-8 flex flex-col justify-between bg-gradient-to-br from-indigo-50 to-white border border-indigo-100">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">
-              AI Mock Interviews
-            </h2>
-            <p className="text-base text-gray-600 mt-2">
-              Practice with AI-powered conversational interviews
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="text-base text-gray-600">Loading...</div>
-          ) : !mockSummary || mockSummary.totalAttempts === 0 ? (
-            <div className="space-y-6">
-              <p className="text-base text-gray-700 font-medium">
-                Build confidence with realistic interview simulations
-              </p>
-              <a
-                href="/candidate/ai-mock-interview"
-                className="inline-flex items-center justify-center rounded-xl px-6 py-4 text-base font-bold text-white shadow-md hover:shadow-lg transition"
-                style={{
-                  background: "linear-gradient(90deg, #4f46e5, #6366f1)",
-                }}
-              >
-                Start Your First Test
+              <a href="/candidate/job-profiles" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                View All <ArrowRight className="w-4 h-4" />
               </a>
             </div>
-          ) : (
+
             <div className="space-y-4">
-              <div className="bg-white/60 rounded-lg p-4 border border-indigo-100">
-                <div className="text-sm text-gray-600 font-medium">
-                  Latest Score
-                </div>
-                <div className="text-4xl font-bold text-indigo-600 mt-2">
-                  {mockSummary.latestScore || 0}
-                  <span className="text-xl text-gray-600 font-semibold">
-                    {" "}
-                    / 100
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/60 rounded-lg p-3 border border-gray-200">
-                  <div className="text-xs text-gray-600 font-medium uppercase">
-                    Attempts
+              {loading ? (
+                [1, 2, 3].map((k) => <Skeleton key={k} height={80} />)
+              ) : recommendedJobs.length === 0 ? (
+                <EmptyState message="No new recommendations right now." />
+              ) : (
+                recommendedJobs.slice(0, 4).map((job) => (
+                  <div key={job.id} className="group flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all cursor-pointer">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-lg font-bold text-gray-500 group-hover:bg-white group-hover:text-indigo-600 group-hover:shadow-sm transition-all">
+                        {job.company?.charAt(0) || "C"}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{job.title}</h3>
+                        <p className="text-sm text-gray-500">{job.company}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="hidden sm:inline-block px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                        {job.location || "Remote"}
+                      </span>
+                      <button className="p-2 rounded-full text-gray-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors">
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mt-1">
-                    {mockSummary.totalAttempts}
-                  </div>
-                </div>
-                <div className="bg-white/60 rounded-lg p-3 border border-gray-200">
-                  <div className="text-xs text-gray-600 font-medium uppercase">
-                    Avg Score
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900 mt-1">
-                    {mockSummary.averageScore || 0}
-                  </div>
-                </div>
-              </div>
-              <a
-                href="/candidate/ai-mock-interview"
-                className="inline-flex items-center justify-center rounded-xl px-6 py-3 text-base font-bold text-white hover:shadow-lg transition w-full"
-                style={{
-                  background: "linear-gradient(90deg, #4f46e5, #6366f1)",
-                }}
-              >
-                Take Another Test
-              </a>
+                ))
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Recent Applications */}
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-green-500" />
+                Recent Applications
+              </h2>
+            </div>
+            
+            <div className="space-y-3">
+              {loading ? (
+                <Skeleton height={60} />
+              ) : applications.length === 0 ? (
+                <EmptyState message="You haven't applied to any jobs yet." />
+              ) : (
+                applications.slice(0, 3).map((app) => (
+                  <div key={app.id} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50 border border-gray-100">
+                    <div>
+                      <div className="font-bold text-gray-900">{app.job?.title || "Unknown Role"}</div>
+                      <div className="text-sm text-gray-500">{app.job?.company} • Applied {new Date(app.createdAt).toLocaleDateString()}</div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                      Applied
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
         </div>
 
-        {/* Quick Actions */}
-        <div className="card p-8 flex flex-col justify-between">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Quick Actions</h2>
-            <p className="text-base text-gray-600 mt-2">
-              Jump to key features in seconds
-            </p>
+        {/* Sidebar Column */}
+        <div className="space-y-8">
+          
+          {/* Quick Actions */}
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h2>
+            <div className="grid grid-cols-1 gap-3">
+              <QuickAction icon={<Search className="w-5 h-5"/>} label="Find Jobs" desc="Browse openings" href="/candidate/job-profiles"/>
+              <QuickAction icon={<FileText className="w-5 h-5"/>} label="Analyze Resume" desc="Check ATS Score" href="/candidate/resume-ats"/>
+              <QuickAction icon={<Zap className="w-5 h-5"/>} label="Mock Interview" desc="Practice AI Test" href="/candidate/ai-mock-interview"/>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <a
-              href="/candidate/job-profiles"
-              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
-            >
-              <div>
-                <div className="text-2xl mb-2">🔍</div>
-                <div className="text-sm font-bold text-gray-900">
-                  Browse Jobs
-                </div>
+
+          {/* Mock Interview Promo */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-white text-center shadow-lg">
+            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+            <div className="relative z-10">
+              <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-8 h-8 text-white" />
               </div>
-            </a>
-            <a
-              href="/candidate/resume-ats"
-              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
-            >
-              <div>
-                <div className="text-2xl mb-2">📄</div>
-                <div className="text-sm font-bold text-gray-900">
-                  Update Resume
-                </div>
-              </div>
-            </a>
-            <a
-              href="/candidate/ai-mock-interview"
-              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
-            >
-              <div>
-                <div className="text-2xl mb-2">🎤</div>
-                <div className="text-sm font-bold text-gray-900">
-                  Mock Interview
-                </div>
-              </div>
-            </a>
-            <a
-              href="/candidate/forum"
-              className="flex items-center justify-center rounded-xl border-2 border-gray-300 bg-white hover:bg-gray-50 px-5 py-6 text-center transition hover:border-indigo-400"
-            >
-              <div>
-                <div className="text-2xl mb-2">💬</div>
-                <div className="text-sm font-bold text-gray-900">Forum</div>
-              </div>
-            </a>
+              <h3 className="text-xl font-bold mb-2">Ready to Practice?</h3>
+              <p className="text-indigo-100 text-sm mb-6">
+                Take a 5-minute AI mock interview to boost your confidence.
+              </p>
+              <a
+                href="/candidate/ai-mock-interview"
+                className="inline-block w-full py-3 bg-white text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-md"
+              >
+                Start Interview
+              </a>
+            </div>
           </div>
+
         </div>
-      </section>
+      </div>
 
       <style jsx>{`
-        @keyframes shimmer {
-          0% {
-            background-position: 0% 0;
-          }
-          100% {
-            background-position: -200% 0;
-          }
-        }
+        @keyframes shimmer { 0% { background-position: 0% 0; } 100% { background-position: -200% 0; } }
       `}</style>
+    </div>
+  );
+}
+
+/* --- Sub-components --- */
+
+function MetricCard({ label, value, desc, icon, color, href }) {
+  return (
+    <a href={href} className="group bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+      <div className={`absolute top-0 right-0 w-24 h-24 ${color} opacity-5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110`}></div>
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-12 h-12 rounded-2xl ${color} flex items-center justify-center shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform`}>
+          {icon}
+        </div>
+        <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-gray-600 transition-colors"/>
+      </div>
+      <div>
+        <div className="text-3xl font-black text-gray-900 mb-1">{value}</div>
+        <div className="font-bold text-gray-700 text-sm">{label}</div>
+        <div className="text-xs text-gray-400 mt-1 font-medium">{desc}</div>
+      </div>
+    </a>
+  );
+}
+
+function QuickAction({ icon, label, desc, href }) {
+  return (
+    <a href={href} className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-transparent hover:border-indigo-200 hover:bg-indigo-50/50 transition-all group">
+      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-600 shadow-sm group-hover:text-indigo-600 group-hover:scale-110 transition-transform">
+        {icon}
+      </div>
+      <div>
+        <div className="font-bold text-gray-900 text-sm group-hover:text-indigo-700 transition-colors">{label}</div>
+        <div className="text-xs text-gray-500">{desc}</div>
+      </div>
+      <ArrowRight className="w-4 h-4 text-gray-300 ml-auto group-hover:text-indigo-400 transition-colors" />
+    </a>
+  );
+}
+
+function EmptyState({ message }) {
+  return (
+    <div className="text-center py-10 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+      <p className="text-gray-500 font-medium text-sm">{message}</p>
     </div>
   );
 }

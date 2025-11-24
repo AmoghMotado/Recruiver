@@ -156,20 +156,13 @@ export default function ATSMatch() {
   }
 
   return (
-    <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900">JD Match Analysis</h1>
-        <p className="text-lg text-gray-600 mt-3">
-          See how closely your resume aligns with the job description using keyword matching and semantic similarity
-        </p>
-      </div>
-
+    <div className="space-y-8 pb-8 pt-6">
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* LEFT COLUMN - Match Score & Enhancements */}
         <div className="space-y-6">
           {/* Score Card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-center">
               <div className="text-sm font-semibold text-gray-600 mb-4">
                 {careerLevel ? `Career Level: ${careerLevel}` : "Career Level: Not specified"}
@@ -182,7 +175,7 @@ export default function ATSMatch() {
           </div>
 
           {/* Enhancements Card */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-8">
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-8 shadow-sm">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               🎯 JD-Specific Tips
             </h3>
@@ -201,7 +194,7 @@ export default function ATSMatch() {
         </div>
 
         {/* MIDDLE COLUMN - Alignment Table */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             JD vs Resume Alignment
           </h2>
@@ -256,7 +249,7 @@ export default function ATSMatch() {
         </div>
 
         {/* RIGHT COLUMN - Resume Preview */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8 overflow-hidden flex flex-col">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 overflow-hidden flex flex-col shadow-sm">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Resume Preview</h2>
           <div className="flex-1 overflow-auto bg-gray-900 rounded-lg p-4">
             {isPdf && pdfUrl ? (
@@ -281,13 +274,13 @@ export default function ATSMatch() {
       {/* Keyword Sections */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Matched Keywords */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
           <h3 className="text-xl font-bold text-gray-900 mb-4">✓ Matched Keywords</h3>
           <KeywordDisplay data={matchedKw} />
         </div>
 
         {/* Missing Keywords */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
           <h3 className="text-xl font-bold text-gray-900 mb-4">⚠ Missing Keywords</h3>
           {jdMissingKw.total === 0 ? (
             <p className="text-sm text-gray-600">No obvious JD keywords missing from your resume. Great match!</p>
@@ -297,7 +290,7 @@ export default function ATSMatch() {
         </div>
 
         {/* Resume-Only Keywords */}
-        <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm hover:shadow-md transition-shadow">
           <h3 className="text-xl font-bold text-gray-900 mb-4">ℹ Resume-Only Keywords</h3>
           {resumeOnlyKw.total === 0 ? (
             <p className="text-sm text-gray-600">No extra keywords beyond the JD focus.</p>

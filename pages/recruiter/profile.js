@@ -97,16 +97,6 @@ export default function CompanyProfile() {
 
   return (
     <div className="space-y-12">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Company Profile 🏢
-        </h1>
-        <p className="text-lg text-gray-600">
-          Manage your company information and hiring preferences
-        </p>
-      </div>
-
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left: Form (2 columns) */}
@@ -290,39 +280,6 @@ export default function CompanyProfile() {
             </div>
           </div>
 
-          {/* Default JD Template Card */}
-          <div className="bg-white border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-gray-900">
-                  Default JD Template
-                </h3>
-                <span className="text-xl">📋</span>
-              </div>
-              <button
-                className="text-sm font-semibold text-gray-600 hover:text-indigo-600 transition-colors px-3 py-1"
-                onClick={() =>
-                  setData((d) => ({
-                    ...d,
-                    defaultJDTemplate: DEFAULTS.defaultJDTemplate,
-                  }))
-                }
-              >
-                Reset
-              </button>
-            </div>
-            <textarea
-              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[220px] resize-none font-mono"
-              value={data.defaultJDTemplate}
-              onChange={(e) =>
-                setData((d) => ({
-                  ...d,
-                  defaultJDTemplate: e.target.value,
-                }))
-              }
-            />
-          </div>
-
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-4">
             <button
@@ -425,7 +382,7 @@ export default function CompanyProfile() {
             </div>
           </div>
         </div>
-      </div>
+      </div>      
     </div>
   );
 }

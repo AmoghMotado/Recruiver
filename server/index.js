@@ -28,7 +28,6 @@ app
     // JSON parser (skip for ATS multipart routes to avoid PayloadTooLargeError)
     const jsonParser = express.json({ limit: "2mb" });
     server.use((req, res, next) => {
-      // ATS microservice may handle its own body parsing (multipart, etc.)
       if (req.path.startsWith("/api/ats/")) {
         return next();
       }
@@ -44,25 +43,30 @@ app
       express.static(path.join(process.cwd(), "uploads"))
     );
 
-    // API routes
+    // API routes (Express – legacy / non-AI stuff)
     server.use("/api/auth", require("./routes/auth"));
     server.use("/api/jobs", require("./routes/jobs"));
     server.use("/api/profile", require("./routes/profile"));
-
-    // ✅ NEW: recruiter candidates + ATS resume scoring
     server.use("/api/candidates", require("./routes/candidates"));
-
-    // ✅ Unified ATS microservice (resume JD matching, etc.)
     server.use("/api/ats", require("./ats"));
-
-    // ✅ Aptitude test config + delivery (round 2)
     server.use("/api/aptitude", require("./routes/aptitude"));
-
     server.use("/api/mock", require("./routes/mock"));
-    server.use("/api/mock-interview", require("./routes/mockInterview"));
+
+    // 🔹 NEW: Video interview config + candidate session (questions per job)
+    server.use("/api/video-interview", require("./routes/videoInterview"));
+
+    // AI video interview pipeline (upload, analyze, score)
+    server.use("/api/interview", require("./routes/interview"));
+
+    // Keep legacy mock interview flow on a different path
+    server.use(
+      "/api/mock-interview-legacy",
+      require("./routes/mockInterview")
+    );
+
     server.use("/api/chat", require("./routes/chat"));
 
-    // Let Next.js handle all page routes
+    // Let Next.js handle all page routes and Next API routes
     server.all("*", (req, res) => handle(req, res));
 
     server.listen(PORT, () => {
