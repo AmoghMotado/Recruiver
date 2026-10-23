@@ -2,11 +2,11 @@
 const express = require("express");
 const router = express.Router();
 const { requireAuth } = require("../middleware/auth");
-const OpenAI = require("openai");
+const { getOpenAI, OPENAI_MODEL } = require("../lib/openai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Keep requests small: only the most recent turns, each capped in length
+const MAX_MESSAGES = 12;
+const MAX_MESSAGE_CHARS = 2000;
 
 // ---- System prompt so the bot knows Recruiver ----
 const BASE_SYSTEM_PROMPT = `
@@ -53,15 +53,20 @@ router.post("/", requireAuth, async (req, res) => {
 
     const systemPrompt = `${BASE_SYSTEM_PROMPT}\n\n${rolePrompt}`;
 
+    const openai = getOpenAI();
+    if (!openai) {
+      return res.status(503).json({ error: "The assistant is not available right now." });
+    }
+
+    const recent = messages.slice(-MAX_MESSAGES).map((m) => ({
+      role: m && m.role === "assistant" ? "assistant" : "user",
+      content: String((m && m.content) || "").slice(0, MAX_MESSAGE_CHARS),
+    }));
+
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: String(m.content || ""),
-        })),
-      ],
+      model: OPENAI_MODEL,
+      messages: [{ role: "system", content: systemPrompt }, ...recent],
+      max_tokens: 600,
       temperature: 0.4,
     });
 

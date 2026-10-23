@@ -1,7 +1,7 @@
 // pages/candidate/video-interview/result.js
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Layout from "../../components/Layout";
+import Layout from "@/components/Layout";
 
 const STORAGE_RESULT_KEY = "videoInterview:result";
 

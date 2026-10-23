@@ -1,4 +1,4 @@
-import RecruiterLayout from "@/components/recruiter/RecruiterLayout";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function RecruiterPrivacy() {
   return (
@@ -63,5 +63,5 @@ export default function RecruiterPrivacy() {
 }
 
 RecruiterPrivacy.getLayout = (page) => (
-  <RecruiterLayout active="privacy">{page}</RecruiterLayout>
+  <DashboardLayout role="RECRUITER" active="privacy">{page}</DashboardLayout>
 );

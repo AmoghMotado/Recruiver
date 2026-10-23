@@ -281,7 +281,7 @@ export default function JobModal({ open, initial, onClose, onSave }) {
             </label>
             <input
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.docx"
               onChange={handleFileChange}
               className="w-full text-sm"
             />

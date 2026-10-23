@@ -34,7 +34,6 @@ export default function CandidatesTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           applicationId: candidate.applicationId,
-          resumePath: candidate.resumePath,
         }),
       });
 

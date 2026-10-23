@@ -6,8 +6,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-package-lock.json
-pnpm-lock.yaml
 .yarn/*
 .yarnrc.yml
 
@@ -72,6 +70,7 @@ Thumbs.db
 # =======================================
 # Uploads / Local Storage Data
 # =======================================
+uploads/
 public/uploads/
 public/profile-pictures/
 public/company-logos/
@@ -113,5 +112,4 @@ tmp/
 temp/
 
 server/firebaseServiceAccount.json
-server/firebaseServiceAccount.json
-server/firebaseServiceAccount.json
+firebaseServiceAccount.json

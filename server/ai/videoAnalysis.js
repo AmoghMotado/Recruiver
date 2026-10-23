@@ -1,10 +1,5 @@
 // server/ai/videoAnalysis.js
-import OpenAI from "openai";
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAI, OPENAI_MODEL } from "../lib/openai";
 
 /**
  * Analyze interview using OpenAI GPT-4 Turbo
@@ -50,8 +45,13 @@ export async function analyzeInterviewWithOpenAI({
     );
 
     // Call OpenAI API
+    const openai = getOpenAI();
+    if (!openai) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
+
     const message = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: OPENAI_MODEL,
       messages: [
         {
           role: "system",

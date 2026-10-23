@@ -1,18 +1,8 @@
 // pages/api/mock-interview/[id].js
-import { getApps, initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { db } from "../../../server/lib/firebaseAdmin";
+import { withAuth } from "../../../server/lib/session";
 
-// Initialise Firebase Admin once (shared with other API routes)
-if (!getApps().length) {
-  initializeApp({
-    credential: applicationDefault(),
-  });
-  console.log("✅ Firebase Admin initialised in /api/mock-interview/[id]");
-}
-
-const db = getFirestore();
-
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ success: false, message: "Method not allowed" });
   }
@@ -37,6 +27,9 @@ export default async function handler(req, res) {
 
     if (sessionSnap.exists) {
       const session = sessionSnap.data() || {};
+      if (session.userId !== req.user.id) {
+        return res.status(404).json({ success: false, message: "No interview results found for this ID." });
+      }
 
       // If we stored latestAttemptId in submit.js, grab that attempt
       if (session.latestAttemptId) {
@@ -59,7 +52,6 @@ export default async function handler(req, res) {
           session.overallScore ??
           attemptData?.overallScore ??
           null,
-        videoUrl: session.videoUrl || attemptData?.videoUrl || null,
         transcript: session.transcript || attemptData?.transcript || "",
 
         // scores from attempt document (5 parameters)
@@ -93,6 +85,7 @@ export default async function handler(req, res) {
     const attemptsSnap = await db
       .collection("mockInterviewAttempts")
       .where("interviewId", "==", interviewId)
+      .where("userId", "==", req.user.id)
       .limit(1)
       .get();
 
@@ -118,9 +111,9 @@ export default async function handler(req, res) {
     console.error("[mock-interview/[id]] Error loading interview:", err);
     return res.status(500).json({
       success: false,
-      message:
-        err.message ||
-        "Failed to load interview results. Please try again later.",
+      message: "Failed to load interview results. Please try again later.",
     });
   }
 }
+
+export default withAuth(handler, { roles: ["CANDIDATE"] });

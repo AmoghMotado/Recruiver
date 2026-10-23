@@ -3,9 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Layout from "@/components/Layout";
-import { db } from "@/firebase/config";
-import { useAuth } from "@/lib/auth";
-import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 // Icons for the New Design
 import { 
   Sparkles, 
@@ -26,9 +23,6 @@ export default function AIMockInterviewDashboard() {
   const router = useRouter();
 
   // 🔐 Auth 
-  const auth = useAuth ? useAuth() : null;
-  const user = auth && auth.user ? auth.user : null;
-  const authLoading = auth && typeof auth.loading === "boolean" ? auth.loading : false;
 
   const [latestAttempt, setLatestAttempt] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,21 +85,10 @@ export default function AIMockInterviewDashboard() {
 
   const loadLatestAttempt = async () => {
     try {
-      const qRef = query(
-        collection(db, "mockInterviewAttempts"),
-        orderBy("createdAt", "desc"),
-        limit(1)
-      );
-
-      const snapshot = await getDocs(qRef);
-
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        const normalized = normalizeLatestAttempt(doc.id, doc.data());
-        setLatestAttempt(normalized);
-      } else {
-        setLatestAttempt(null);
-      }
+      const res = await fetch("/api/mock-interview/summary", { credentials: "include" });
+      const data = res.ok ? await res.json() : null;
+      const latest = data && data.latestAttempt;
+      setLatestAttempt(latest ? normalizeLatestAttempt(latest.id, latest) : null);
     } catch (error) {
       console.error("Error loading attempts:", error);
     } finally {
@@ -117,21 +100,13 @@ export default function AIMockInterviewDashboard() {
     try {
       setStartError(null);
 
-      // While auth is still loading, just prevent double-clicks
-      if (authLoading) return;
-
       setStartingInterview(true);
-
-      // ✅ Always provide a userId so the API never rejects with "userId is required"
-      const currentUserId =
-        (user && (user.uid || user.id || user.userId || user.firebaseId)) ||
-        "demoUser123"; // fallback so the flow *always* works
 
       const res = await fetch("/api/mock-interview/start", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();
@@ -199,7 +174,7 @@ export default function AIMockInterviewDashboard() {
                     <button
                     className="btn primary btn-start-interview"
                     onClick={startNewInterview}
-                    disabled={startingInterview || authLoading}
+                    disabled={startingInterview}
                     >
                     {startingInterview
                         ? "Preparing interview..."
@@ -436,7 +411,7 @@ export default function AIMockInterviewDashboard() {
             <div className="flex flex-col items-center justify-center mb-16 gap-4">
               <button 
                 onClick={startNewInterview}
-                disabled={startingInterview || authLoading}
+                disabled={startingInterview}
                 className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-10 py-5 rounded-2xl text-lg font-bold shadow-2xl hover:shadow-indigo-500/50 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100"
               >
                 <span className="relative z-10 flex items-center gap-3">
@@ -621,7 +596,7 @@ export default function AIMockInterviewDashboard() {
               
               <button 
                 onClick={startNewInterview}
-                disabled={startingInterview || authLoading}
+                disabled={startingInterview}
                 className="group inline-flex items-center gap-3 bg-white text-indigo-600 px-10 py-5 rounded-2xl text-lg font-bold shadow-2xl hover:shadow-white/50 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100"
               >
                 <Sparkles className="w-6 h-6" />

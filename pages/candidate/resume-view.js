@@ -114,7 +114,7 @@ export default function ResumeView() {
             <input
               ref={uploadRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.docx,.txt"
               className="hidden"
               onChange={(e) => handleUpload(e.target.files?.[0])}
             />
@@ -180,7 +180,7 @@ export default function ResumeView() {
               <input
                 ref={uploadRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.docx,.txt"
                 className="hidden"
                 onChange={(e) => handleUpload(e.target.files?.[0])}
                 disabled={uploading}

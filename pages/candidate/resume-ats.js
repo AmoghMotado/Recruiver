@@ -234,7 +234,7 @@ export default function ResumeATS() {
             <input
               ref={resumeInputA}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.docx,.txt"
               className="hidden"
               onChange={(e) => handleResumeUpload(e.target.files?.[0], "A")}
             />
@@ -300,7 +300,7 @@ export default function ResumeATS() {
                <input
                   ref={resumeInputB}
                   type="file"
-                  accept=".pdf,.doc,.docx,.txt"
+                  accept=".pdf,.docx,.txt"
                   className="hidden"
                   onChange={(e) => handleResumeUpload(e.target.files?.[0], "B")}
                 />
@@ -327,7 +327,7 @@ export default function ResumeATS() {
                <input
                   ref={jdInput}
                   type="file"
-                  accept=".pdf,.doc,.docx,.txt"
+                  accept=".pdf,.docx,.txt"
                   className="hidden"
                   onChange={(e) => handleJDUpload(e.target.files?.[0])}
                 />

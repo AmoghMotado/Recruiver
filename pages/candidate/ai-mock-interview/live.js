@@ -9,8 +9,7 @@ import useCamera from "../../../hooks/useCamera";
 import useRecording from "../../../hooks/useRecording";
 import useEyeDetection from "../../../hooks/useEyeDetection";
 import useFaceTracking from "../../../hooks/useFaceTracking";
-import { uploadInterviewVideo } from "../../../firebase/uploadVideo";
-import { useAuth } from "@/lib/auth";
+import { uploadInterviewVideo } from "@/lib/uploadVideo";
 
 const INTERVIEW_QUESTIONS = [
   "Tell me about yourself and your background.",
@@ -30,16 +29,6 @@ export default function LiveMockInterview() {
   const interviewId = Array.isArray(interviewIdQuery)
     ? interviewIdQuery[0]
     : interviewIdQuery || null;
-
-  const authCtx = (() => {
-    try {
-      return useAuth();
-    } catch {
-      return null;
-    }
-  })();
-
-  const user = authCtx?.user || null;
 
   // Camera & recording hooks
   const { videoRef, mediaStream, startCamera, stopCamera } = useCamera();
@@ -257,16 +246,6 @@ export default function LiveMockInterview() {
         throw new Error("No recorded video found. Please record first.");
       }
 
-      // Determine userId from auth (fallback to demo)
-      const effectiveUserId =
-        user?.uid ||
-        user?.id ||
-        user?.userId ||
-        user?._id ||
-        "demoUser123";
-
-      console.log("[LIVE] Using userId:", effectiveUserId);
-
       // 2) Upload video to Firebase Storage
       setProcessingStage("Uploading video to cloud...");
       setUploadProgress(0);
@@ -274,14 +253,13 @@ export default function LiveMockInterview() {
       console.log("[LIVE] Uploading video...");
       const uploadResult = await uploadInterviewVideo(
         videoBlob,
-        effectiveUserId,
+        effectiveInterviewId,
         (pct) => {
           setUploadProgress(pct);
           setProcessingStage(`Uploading video to cloud... ${pct}%`);
         }
       );
 
-      console.log("[LIVE] Video uploaded:", uploadResult.downloadUrl);
 
       // 3) Call backend for AI analysis
       setProcessingStage("Running AI analysis on your interview...");
@@ -294,8 +272,7 @@ export default function LiveMockInterview() {
 
       const payload = {
         interviewId: effectiveInterviewId,
-        userId: effectiveUserId,
-        videoUrl: uploadResult.downloadUrl,
+        videoPath: uploadResult.filePath,
         transcript,
         eyeContactPercent,
         extraStats,

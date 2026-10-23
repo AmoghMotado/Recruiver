@@ -32,24 +32,12 @@ const formatDateForInput = (dateStr) => {
   return dateStr;
 };
 
-// Try a few possible keys where your login might have stored email
-const getStoredEmail = () => {
-  if (typeof window === "undefined") return "";
-  return (
-    localStorage.getItem("candidateEmail") ||
-    localStorage.getItem("userEmail") ||
-    localStorage.getItem("email") ||
-    ""
-  );
-};
-
 function CandidateProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   // We no longer depend on Firebase Auth here
-  const [emailKey, setEmailKey] = useState("");
 
   // User basics
   const [user, setUser] = useState({
@@ -103,7 +91,7 @@ function CandidateProfilePage() {
     return () => obs.disconnect();
   }, []);
 
-  // 🔐 Load profile via /api/profile/candidate (using email as key)
+  // Load the signed-in candidate's profile
   useEffect(() => {
     let cancelled = false;
 
@@ -112,18 +100,13 @@ function CandidateProfilePage() {
         setLoading(true);
         setError("");
 
-        const storedEmail = getStoredEmail();
-
-        if (!storedEmail) {
+        const res = await fetch("/api/profile/candidate", {
+          credentials: "include",
+        });
+        if (res.status === 401) {
           setError("Please sign in to view and edit your profile.");
           return;
         }
-
-        setEmailKey(storedEmail.toLowerCase());
-
-        const res = await fetch(
-          `/api/profile/candidate?email=${encodeURIComponent(storedEmail)}`
-        );
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
@@ -138,7 +121,7 @@ function CandidateProfilePage() {
         setUser({
           firstName: u.firstName || "",
           lastName: u.lastName || "",
-          email: u.email || storedEmail,
+          email: u.email || "",
           phone: u.phone || "",
           dob: formatDateForInput(u.dob || ""),
           gender: u.gender || "",
@@ -232,40 +215,29 @@ function CandidateProfilePage() {
 
   // 💾 Save profile VIA API (same route as load)
   const save = async () => {
-    const finalEmail = (user.email || emailKey || getStoredEmail()).trim();
-
-    if (!finalEmail) {
-      setError("No user email found. Please sign in again.");
-      return;
-    }
-
     try {
       setSaving(true);
       setError("");
 
       const payload = {
-        user: {
-          firstName: user.firstName || "",
-          lastName: user.lastName || "",
-          email: finalEmail.toLowerCase(),
-          phone: user.phone || "",
-          dob: formatDateForInput(user.dob),
-          gender: user.gender || "",
-        },
-        candidate: {
-          headline: bio.headline || "",
-          summary: bio.summary || "",
-          skills,
-          education,
-          experience,
-          projects,
-          links,
-          completion,
-        },
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        phone: user.phone || "",
+        dob: formatDateForInput(user.dob),
+        gender: user.gender || "",
+        headline: bio.headline || "",
+        summary: bio.summary || "",
+        skills,
+        education,
+        experience,
+        projects,
+        links,
+        completion,
       };
 
       const res = await fetch("/api/profile/candidate", {
-        method: "POST",
+        method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -407,10 +379,10 @@ function CandidateProfilePage() {
                 onChange={(v) => setUser({ ...user, lastName: v })}
               />
               <Field
-                disabled={!editable.personal}
+                disabled
                 label="Email"
                 value={user.email}
-                onChange={(v) => setUser({ ...user, email: v })}
+                onChange={() => {}}
               />
               <Field
                 disabled={!editable.personal}

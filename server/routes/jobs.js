@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { parseUploadPath } = require("../lib/uploads");
 const { db } = require("../lib/firebaseAdmin");
 const { sendHrSelectionEmail } = require("../lib/email");
 
@@ -90,7 +91,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${Math.round(
       Math.random() * 1e9
-    )}${path.extname(file.originalname)}`;
+    )}${path.extname(file.originalname).toLowerCase()}`;
     cb(null, uniqueName);
   },
 });
@@ -100,10 +101,10 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if ([".pdf", ".doc", ".docx"].includes(ext)) {
+    if ([".pdf", ".docx"].includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Only PDF, DOC, and DOCX files are allowed"));
+      cb(new Error("Please upload a PDF or DOCX file"));
     }
   },
 });
@@ -111,6 +112,14 @@ const upload = multer({
 /* =========================================================
    Upload endpoints
    ========================================================= */
+
+// Remembers who uploaded a file so server/routes/files.js can authorize downloads.
+function recordUpload(publicPath, ownerId, kind) {
+  return db
+    .collection("uploads")
+    .doc(encodeURIComponent(publicPath))
+    .set({ path: publicPath, ownerId, kind, createdAt: new Date() });
+}
 
 /**
  * POST /api/jobs/upload-jd
@@ -121,12 +130,13 @@ router.post(
   requireAuth,
   requireRole("RECRUITER"),
   upload.single("jd"),
-  (req, res) => {
+  async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
       const filePath = `/uploads/job-descriptions/${req.file.filename}`;
+      await recordUpload(filePath, req.user.id, "job-descriptions");
       return res.json({
         filePath,
         filename: req.file.originalname,
@@ -148,12 +158,13 @@ router.post(
   requireAuth,
   requireRole("CANDIDATE"),
   upload.single("resume"),
-  (req, res) => {
+  async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
       const filePath = `/uploads/resumes/${req.file.filename}`;
+      await recordUpload(filePath, req.user.id, "resumes");
       return res.json({
         filePath,
         filename: req.file.originalname,
@@ -401,7 +412,11 @@ router.post(
     try {
       const jobId = req.params.id;
       const userId = req.user.id;
-      const { resumePath = "" } = req.body || {};
+      const rawResumePath = (req.body && req.body.resumePath) || "";
+      const resumePath = rawResumePath ? parseUploadPath(rawResumePath)?.publicPath : "";
+      if (rawResumePath && !resumePath) {
+        return res.status(400).json({ message: "Invalid resume path" });
+      }
 
       const jobRef = db.collection("jobs").doc(jobId);
       const jobSnap = await jobRef.get();
@@ -755,79 +770,6 @@ router.get(
     } catch (err) {
       console.error("Error fetching recruiter candidates:", err);
       return res.status(500).json({ message: "Failed to load candidates" });
-    }
-  }
-);
-
-/**
- * POST /api/jobs/applications/:id/aptitude-score
- * Candidate submits aptitude test score.
- * 🔁 After this, candidate should see "Under Review" (no Round 2 yet).
- */
-router.post(
-  "/applications/:id/aptitude-score",
-  requireAuth,
-  requireRole("CANDIDATE"),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { score, summary } = req.body || {};
-
-      const numericScore = Number(score);
-      if (Number.isNaN(numericScore)) {
-        return res.status(400).json({ message: "Invalid score" });
-      }
-
-      const appRef = db.collection("applications").doc(id);
-      const appSnap = await appRef.get();
-      if (!appSnap.exists) {
-        return res.status(404).json({ message: "Application not found" });
-      }
-      const app = appSnap.data();
-
-      if (app.studentId !== req.user.id) {
-        return res.status(403).json({ message: "Not your application" });
-      }
-
-      const now = new Date();
-
-      // If recruiter had SHORTLISTED, move to UNDER_REVIEW after test
-      let nextStatus = app.status || "APPLIED";
-      if (nextStatus === "SHORTLISTED") {
-        nextStatus = "UNDER_REVIEW";
-      }
-
-      const updates = {
-        score: numericScore,
-        status: nextStatus,
-        updatedAt: now,
-      };
-
-      // Round 1 complete – keep the application in Stage 1
-      // (Round 2 invitation is controlled by recruiter via SHORTLIST_ROUND2)
-      const newStage =
-        typeof app.stage === "number" ? Math.max(app.stage, 1) : 1;
-      updates.stage = newStage;
-
-      if (summary) {
-        updates.aptitudeSummary = summary;
-      }
-
-      await appRef.set(updates, { merge: true });
-      const updated = { id: appSnap.id, ...app, ...updates };
-
-      return res.json({
-        message: "Aptitude score recorded",
-        application: updated,
-      });
-    } catch (err) {
-      console.error(
-        "Error in POST /api/jobs/applications/:id/aptitude-score:",
-        err
-      );
-      return res
-        .status(500)
-        .json({ message: "Failed to record aptitude score" });
     }
   }
 );

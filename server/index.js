@@ -1,13 +1,20 @@
 // server/index.js
+// Load .env / .env.production the same way Next.js does, before anything
+// reads process.env (the env check below runs before Next starts).
+require("@next/env").loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
+
 const express = require("express");
 const next = require("next");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const helmet = require("helmet");
 const morgan = require("morgan");
-const path = require("path");
 
-const dev = process.env.NODE_ENV !== "production";
-const app = next({ dev });
+const { isProd, validateEnv, getAllowedOrigins } = require("./lib/env");
+
+validateEnv();
+
+const app = next({ dev: !isProd });
 const handle = app.getRequestHandler();
 
 const PORT = process.env.PORT || 3000;
@@ -17,10 +24,22 @@ app
   .then(() => {
     const server = express();
 
-    // CORS
+    server.disable("x-powered-by");
+    // Behind a load balancer / Cloud Run, so secure cookies and req.ip work
+    server.set("trust proxy", 1);
+
+    // Content-Security-Policy is added once the redesign removes inline styles
+    server.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+    const allowedOrigins = getAllowedOrigins();
     server.use(
+      "/api",
       cors({
-        origin: true,
+        origin(origin, cb) {
+          // Same-origin requests and server-to-server calls send no Origin
+          if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+          return cb(null, false);
+        },
         credentials: true,
       })
     );
@@ -35,39 +54,40 @@ app
     });
 
     server.use(cookieParser());
-    server.use(morgan("dev"));
+    server.use(morgan(isProd ? "combined" : "dev"));
 
-    // Static uploads
-    server.use(
-      "/uploads",
-      express.static(path.join(process.cwd(), "uploads"))
-    );
+    server.get("/healthz", (req, res) => res.json({ ok: true }));
 
-    // API routes (Express – legacy / non-AI stuff)
+    // Uploaded files, with per-file access checks (never served statically)
+    server.use("/uploads", require("./routes/files"));
+
+    // API routes (Express)
     server.use("/api/auth", require("./routes/auth"));
     server.use("/api/jobs", require("./routes/jobs"));
     server.use("/api/profile", require("./routes/profile"));
     server.use("/api/candidates", require("./routes/candidates"));
     server.use("/api/ats", require("./ats"));
     server.use("/api/aptitude", require("./routes/aptitude"));
-    server.use("/api/mock", require("./routes/mock"));
 
-    // 🔹 NEW: Video interview config + candidate session (questions per job)
+    // Video interview config + candidate session (questions per job)
     server.use("/api/video-interview", require("./routes/videoInterview"));
 
     // AI video interview pipeline (upload, analyze, score)
     server.use("/api/interview", require("./routes/interview"));
 
-    // Keep legacy mock interview flow on a different path
-    server.use(
-      "/api/mock-interview-legacy",
-      require("./routes/mockInterview")
-    );
-
     server.use("/api/chat", require("./routes/chat"));
 
     // Let Next.js handle all page routes and Next API routes
     server.all("*", (req, res) => handle(req, res));
+
+    // Last-resort error handler: log the details, return a generic message
+    // eslint-disable-next-line no-unused-vars
+    server.use((err, req, res, next) => {
+      console.error("Unhandled error:", err);
+      if (res.headersSent) return;
+      const status = err.status || err.statusCode || 500;
+      res.status(status).json({ error: status === 500 ? "Server error" : err.message });
+    });
 
     server.listen(PORT, () => {
       console.log(`➡ Server ready on http://localhost:${PORT}`);
