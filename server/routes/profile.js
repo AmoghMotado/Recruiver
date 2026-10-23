@@ -1,7 +1,7 @@
 // server/routes/profile.js
 const express = require("express");
-const { db } = require("../lib/firebaseAdmin"); // adjust path if needed
-const { requireAuth } = require("../middleware/auth");
+const { db } = require("../lib/firebaseAdmin");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -74,7 +74,6 @@ router.put("/candidate", requireAuth, async (req, res) => {
     const allowedFields = [
       "firstName",
       "lastName",
-      "email",
       "phone",
       "dob",
       "gender",
@@ -91,12 +90,16 @@ router.put("/candidate", requireAuth, async (req, res) => {
       "experience",
       "projects",
       "links",
+      "completion",
     ];
 
+    // Email and role are deliberately not editable here: email is the login
+    // identifier and role decides what the account can access.
+    const body = req.body || {};
     const updates = {};
     for (const key of allowedFields) {
-      if (key in req.body) {
-        updates[key] = req.body[key];
+      if (key in body) {
+        updates[key] = body[key];
       }
     }
     updates.updatedAt = new Date().toISOString();
@@ -106,6 +109,33 @@ router.put("/candidate", requireAuth, async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     console.error("/api/profile/candidate PUT error (Firebase):", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * GET /api/profile/recruiter
+ * Basic account details for the signed-in recruiter
+ */
+router.get("/recruiter", requireAuth, requireRole("RECRUITER"), async (req, res) => {
+  try {
+    const docSnap = await db.collection("users").doc(req.user.id).get();
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const data = docSnap.data() || {};
+    return res.json({
+      user: {
+        id: docSnap.id,
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        role: "RECRUITER",
+      },
+    });
+  } catch (err) {
+    console.error("/api/profile/recruiter GET error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });

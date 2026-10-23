@@ -1,19 +1,9 @@
 // pages/api/mock-interview/submit.js
-import { getApps, initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { db } from "../../../server/lib/firebaseAdmin";
+import { withAuth } from "../../../server/lib/session";
 import { analyzeInterviewWithOpenAI } from "../../../server/ai/videoAnalysis";
 
-// Re-use existing admin app; if not initialised, fall back to applicationDefault()
-if (!getApps().length) {
-  initializeApp({
-    credential: applicationDefault(),
-  });
-  console.log("✅ Firebase Admin initialised in /api/mock-interview/submit");
-}
-
-const db = getFirestore();
-
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -24,8 +14,7 @@ export default async function handler(req, res) {
   try {
     const {
       interviewId,
-      userId,
-      videoUrl,
+      videoPath,
       transcript,
       eyeContactPercent,
       extraStats,
@@ -37,8 +26,7 @@ export default async function handler(req, res) {
       `[${sessionId}] /api/mock-interview/submit - Incoming request:`,
       {
         interviewId,
-        hasUserId: !!userId,
-        hasVideoUrl: !!videoUrl,
+        hasVideo: !!videoPath,
         transcriptLength: transcript ? transcript.length : 0,
         eyeContactPercent,
         extraStatsKeys: extraStats ? Object.keys(extraStats) : [],
@@ -51,14 +39,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "interviewId is required" });
     }
 
-    if (!userId) {
-      console.error(`[${sessionId}] Missing userId`);
-      return res.status(400).json({ error: "userId is required" });
+    const userId = req.user.id;
+    const sessionSnap = await db.collection("mockInterviews").doc(String(interviewId)).get();
+    if (!sessionSnap.exists || sessionSnap.data().userId !== userId) {
+      return res.status(404).json({ error: "Interview not found" });
     }
 
-    if (!videoUrl) {
-      console.error(`[${sessionId}] Missing videoUrl`);
-      return res.status(400).json({ error: "videoUrl is required" });
+    // The recording must be one this user uploaded via /upload-url
+    if (
+      typeof videoPath !== "string" ||
+      !videoPath.startsWith(`mock-interviews/${req.user.id}/${interviewId}-`) ||
+      videoPath.includes("..")
+    ) {
+      return res.status(400).json({ error: "A valid recording is required" });
     }
 
     console.log(
@@ -154,7 +147,7 @@ export default async function handler(req, res) {
       userId,
       interviewId,
       createdAt: new Date().toISOString(),
-      videoUrl,
+      videoPath,
       transcript: transcript && transcript.trim() ? transcript : "",
       durationSec,
 
@@ -204,7 +197,7 @@ export default async function handler(req, res) {
     // 9) Update the main interview session doc
     const sessionPayload = {
       userId,
-      videoUrl,
+      videoPath,
       transcript: transcript && transcript.trim() ? transcript : "",
       metrics,
       startedAt: startedAt || null,
@@ -343,3 +336,5 @@ function getDefaultMetrics() {
     pauses: { estimatedPauses: 5 },
   };
 }
+
+export default withAuth(handler, { roles: ["CANDIDATE"] });

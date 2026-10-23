@@ -426,8 +426,8 @@ router.get(
  *   endReason?: "TIME_UP" | "VIOLATION_LIMIT" | "MANUAL"
  * }
  *
- * Also backwards-compatible with the old payload:
- * { applicationId, score, summary }
+ * The score is always computed here from the answers; a client-sent score is
+ * ignored. Each application can submit the test once.
  */
 router.post(
   "/submit",
@@ -438,11 +438,10 @@ router.post(
       const {
         applicationId,
         answers,
-        proctoring = {},
-        score,
-        summary,
+        proctoring: rawProctoring,
         endReason,
       } = req.body || {};
+      const proctoring = rawProctoring && typeof rawProctoring === "object" ? rawProctoring : {};
 
       if (!applicationId) {
         return res.status(400).json({ message: "applicationId is required" });
@@ -460,6 +459,12 @@ router.post(
         return res
           .status(403)
           .json({ message: "You are not allowed to submit this test" });
+      }
+
+      if (app.aptitudeSummary && app.aptitudeSummary.submittedAt) {
+        return res
+          .status(409)
+          .json({ message: "This test has already been submitted" });
       }
 
       // 2) Load job & aptitude config
@@ -490,10 +495,7 @@ router.post(
       let serverSummary = null;
 
       /* ---------- Preferred: compute score from answers ---------- */
-      if (
-        (Array.isArray(answers) && answers.length) ||
-        (answers && typeof answers === "object")
-      ) {
+      if (Array.isArray(answers) || (answers && typeof answers === "object")) {
         const answersById = {};
 
         if (Array.isArray(answers)) {
@@ -543,28 +545,14 @@ router.post(
           proctoring: {
             totalViolations: Number(proctoring.totalViolations) || 0,
             autoSubmitted: !!proctoring.autoSubmitted,
-            ...proctoring,
           },
-          jobTitle: job.title || "",
-          company: job.company || "",
-          submittedAt: new Date(),
-        };
-      } else if (typeof score === "number") {
-        // ---------- Backwards compatible path ----------
-        finalScore = Number(score) || 0;
-        const totalQuestions =
-          (summary && (summary.totalQuestions || summary.total)) || 0;
-        serverSummary = {
-          ...(summary || {}),
-          totalQuestions,
-          score: finalScore,
           jobTitle: job.title || "",
           company: job.company || "",
           submittedAt: new Date(),
         };
       } else {
         return res.status(400).json({
-          message: "Either answers or numeric score is required",
+          message: "answers are required",
         });
       }
 

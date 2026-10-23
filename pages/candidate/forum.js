@@ -86,23 +86,10 @@ function CandidateForum() {
       return;
     }
 
-    const currentUser = user || {
-      uid: "demo-user-" + Math.random().toString(36).substring(7),
-      displayName: "Anonymous Candidate",
-      email: "anonymous@recruiver.local",
-    };
-
     setSending(true);
     setError("");
 
-    const payload = {
-      content: input.trim(),
-      authorId: String(currentUser.uid),
-      authorName: String(
-        currentUser.displayName || currentUser.email || "Anonymous"
-      ),
-      authorEmail: String(currentUser.email || ""),
-    };
+    const payload = { content: input.trim() };
 
     try {
       const res = await fetch("/api/forum/messages", {
@@ -216,7 +203,7 @@ function CandidateForum() {
             // REMOVED: max-w-4xl mx-auto to allow full width
             <div className="w-full space-y-8">
               {messages.map((m, idx) => {
-                const isOwnMessage = m.authorId === user?.uid;
+                const isOwnMessage = m.authorId === user?.id;
                 
                 return (
                   <div 

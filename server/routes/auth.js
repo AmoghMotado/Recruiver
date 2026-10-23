@@ -1,18 +1,14 @@
 // server/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const { db } = require("../lib/firebaseAdmin");
+const {
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  signSession,
+} = require("../lib/session");
+const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
-// ---- Robust fetch polyfill (works with node-fetch v2/v3 or Node18 global) ----
-let fetchImpl = global.fetch;
-if (!fetchImpl) {
-  const nodeFetch = require("node-fetch");
-  fetchImpl = nodeFetch.default || nodeFetch;
-}
-const fetch = (...args) => fetchImpl(...args);
-
-
 
 // ---------- Google config ----------
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -45,22 +41,27 @@ async function findUserByEmail(email) {
   return { id: doc.id, ...doc.data() };
 }
 
-// Create JWT
 function createJwt(userId, role) {
-  return jwt.sign({ id: userId, role }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
+  return signSession({ id: userId, role });
+}
+
+function setAuthCookie(res, token) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS * 1000,
   });
 }
 
-// Set auth cookie
-function setAuthCookie(res, token) {
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+// Only allow redirects to paths on this site, never to another origin.
+function safeRedirectPath(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+    return fallback;
+  }
+  return value;
 }
 
 // ---------- Email / Password auth ----------
@@ -130,7 +131,7 @@ router.post("/register", async (req, res) => {
     const token = createJwt(user.id, user.role);
     setAuthCookie(res, token);
 
-    return res.status(201).json({ token, user });
+    return res.status(201).json({ user });
   } catch (err) {
     console.error("Register error (Firebase):", err);
     return res.status(500).json({ error: "Server error" });
@@ -193,7 +194,7 @@ router.post("/login", async (req, res) => {
       role: storedRole,
     };
 
-    return res.json({ token, user: safeUser });
+    return res.json({ user: safeUser });
   } catch (err) {
     console.error("Login error (Firebase):", err);
     return res.status(500).json({ error: "Server error" });
@@ -229,11 +230,10 @@ router.get("/google", (req, res) => {
     const rawRole = (req.query.role || req.query.type || "CANDIDATE").toString();
     const role = normalizeRole(rawRole) || "CANDIDATE";
 
-    const redirect =
-      req.query.redirect ||
-      (role === "RECRUITER"
-        ? "/recruiter/dashboard"
-        : "/candidate/dashboard");
+    const redirect = safeRedirectPath(
+      req.query.redirect,
+      role === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard"
+    );
 
     const statePayload = { role, redirect };
     const state = Buffer.from(JSON.stringify(statePayload)).toString(
@@ -241,7 +241,6 @@ router.get("/google", (req, res) => {
     );
 
     const url = buildGoogleAuthUrl(state);
-    console.log("Google OAuth URL:", url);
     return res.redirect(url);
   } catch (err) {
     console.error("GET /api/auth/google error:", err);
@@ -274,11 +273,10 @@ router.get("/google/callback", async (req, res) => {
     }
 
     const requestedRole = normalizeRole(payload.role) || "CANDIDATE";
-    const redirectUrl =
-      payload.redirect ||
-      (requestedRole === "RECRUITER"
-        ? "/recruiter/dashboard"
-        : "/candidate/dashboard");
+    const redirectUrl = safeRedirectPath(
+      payload.redirect,
+      requestedRole === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard"
+    );
 
     // 1. Exchange code for tokens
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -440,9 +438,34 @@ router.get("/google/callback", async (req, res) => {
   }
 });
 
-// ---------- Optional: simple logout ----------
+// GET /api/auth/me – the signed-in user, or 401
+router.get("/me", requireAuth, async (req, res) => {
+  try {
+    const snap = await db.collection("users").doc(req.user.id).get();
+    if (!snap.exists) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const u = snap.data() || {};
+    const displayName = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+    return res.json({
+      user: {
+        id: snap.id,
+        email: u.email || "",
+        firstName: u.firstName || "",
+        lastName: u.lastName || "",
+        displayName: displayName || (u.email || "").split("@")[0],
+        role: normalizeRole(u.role) || req.user.role,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/auth/me error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ---------- Logout ----------
 router.post("/logout", (req, res) => {
-  res.clearCookie("token");
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
   return res.json({ ok: true });
 });
 

@@ -1,66 +1,54 @@
 // server/lib/firebaseAdmin.js
+// The single Firebase Admin instance used by Express routes and Next.js API routes.
+//
+// Credentials, first match wins:
+//   1. FIREBASE_SERVICE_ACCOUNT_JSON  – the whole service account JSON in one env var
+//   2. FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY
+//   3. firebase-service-account.json / firebaseServiceAccount.json in the project root (local dev)
+//   4. Application Default Credentials (Cloud Run, GCE, `gcloud auth application-default login`)
 const admin = require("firebase-admin");
 const path = require("path");
 const fs = require("fs");
 
-// Only initialize if not already initialized
-if (!admin.apps.length) {
-  try {
-    // Try both possible filenames
-    let serviceAccountPath = path.join(
-      process.cwd(),
-      "firebase-service-account.json"
-    );
+function loadCredential() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+  }
 
-    if (!fs.existsSync(serviceAccountPath)) {
-      serviceAccountPath = path.join(
-        process.cwd(),
-        "firebaseServiceAccount.json"
-      );
-    }
+  if (
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY
+  ) {
+    return admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    });
+  }
 
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = require(serviceAccountPath);
-
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      });
-
-      console.log("✅ Firebase Admin initialised with service account");
-      console.log("📁 Loaded from:", serviceAccountPath);
-    } else {
-      // No service account found
-      console.log("⚠️ Service account file not found. Checked:");
-      console.log("   - firebase-service-account.json");
-      console.log("   - firebaseServiceAccount.json");
-
-      admin.initializeApp({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "recruiver",
-      });
-
-      console.log(
-        "✅ Firebase Admin initialized without service account (limited functionality)"
-      );
-    }
-  } catch (error) {
-    console.error("❌ Firebase Admin initialization error:", error.message);
-
-    // Last resort fallback
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "recruiver",
-      });
-      console.log("✅ Firebase Admin initialized with fallback config");
+  for (const name of ["firebase-service-account.json", "firebaseServiceAccount.json"]) {
+    const file = path.join(process.cwd(), name);
+    if (fs.existsSync(file)) {
+      return admin.credential.cert(JSON.parse(fs.readFileSync(file, "utf8")));
     }
   }
+
+  return admin.credential.applicationDefault();
 }
 
-// ---- EXPORTS ----
-const db = admin.firestore();
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: loadCredential(),
+    projectId:
+      process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket:
+      process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  });
+}
 
-// IMPORTANT FIX: create the Storage *instance*, not the function
-const storage = admin.storage(); // <— this is what gives you .bucket()
+const db = admin.firestore();
+const storage = admin.storage();
 
 module.exports = {
   admin,

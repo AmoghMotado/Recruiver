@@ -1,13 +1,16 @@
 // server/ats/index.js
 const express = require("express");
 const multer = require("multer");
-const pdfParse = require("pdf-parse");
-const mammoth = require("mammoth");
+const { extractText } = require("../lib/documentText");
+const { requireAuth } = require("../middleware/auth");
 
 const { MAX_FILE_MB } = require("./config");
 const { computeGeneralATS, computeMatchATS } = require("./scoring");
 
 const router = express.Router();
+
+// Resume parsing is only available to signed-in users
+router.use(requireAuth);
 
 // Multer in-memory upload with size limit
 const upload = multer({
@@ -19,36 +22,7 @@ const upload = multer({
 
 async function fileToText(file) {
   if (!file) return "";
-  const buffer = file.buffer;
-  const mimetype = file.mimetype || "";
-  const name = file.originalname || "";
-
-  // PDF
-  if (mimetype === "application/pdf") {
-    try {
-      const data = await pdfParse(buffer);
-      if (data && data.text) return data.text;
-    } catch (err) {
-      console.error("pdf-parse failed, falling back to utf8:", err.message);
-    }
-  }
-
-  // DOCX
-  if (
-    mimetype ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    name.toLowerCase().endsWith(".docx")
-  ) {
-    try {
-      const { value } = await mammoth.extractRawText({ buffer });
-      if (value && value.trim()) return value;
-    } catch (err) {
-      console.error("mammoth docx parse failed, falling back to utf8:", err.message);
-    }
-  }
-
-  // Fallback for txt / doc / unknown
-  return buffer.toString("utf8");
+  return extractText(file.buffer);
 }
 
 /* ------------------------- GENERAL ATS --------------------------- */
@@ -71,7 +45,7 @@ router.post("/general", upload.single("resume"), async (req, res, next) => {
     if (!text.trim()) {
       return res.status(400).json({
         ok: false,
-        message: "Could not read any text from the uploaded resume.",
+        message: "We couldn't read any text from this resume. Please upload a text-based PDF or DOCX (not a scanned image).",
       });
     }
 
@@ -124,7 +98,7 @@ router.post(
       if (!resumeText.trim() || !jdText.trim()) {
         return res.status(400).json({
           ok: false,
-          message: "Could not read text from resume or JD.",
+          message: "We couldn't read text from the resume or job description. Please upload text-based PDF or DOCX files.",
         });
       }
 

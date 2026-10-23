@@ -7,7 +7,10 @@ const { db, storage } = require("../lib/firebaseAdmin");
 const router = express.Router();
 
 // In-memory upload for video
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 150 * 1024 * 1024, files: 1 },
+});
 
 /* -------------------------------------------------------
    Helpers

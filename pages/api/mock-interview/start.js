@@ -1,16 +1,7 @@
 // pages/api/mock-interview/start.js
-import { getApps, initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { v4 as uuidv4 } from "uuid";
-
-if (!getApps().length) {
-  initializeApp({
-    credential: applicationDefault(),
-  });
-  console.log("✅ Firebase Admin initialised in /api/mock-interview/start");
-}
-
-const db = getFirestore();
+import { randomUUID } from "crypto";
+import { db } from "../../../server/lib/firebaseAdmin";
+import { withAuth } from "../../../server/lib/session";
 
 const INTERVIEW_CONFIG = {
   questionsCount: 5,
@@ -18,29 +9,14 @@ const INTERVIEW_CONFIG = {
   totalTimeLimit: 600, // 10 minutes total
 };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { userId } = req.body || {};
-
-    console.log("[/api/mock-interview/start] Received request:", { userId });
-
-    // Validate userId
-    if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
-      console.error(
-        "[/api/mock-interview/start] Invalid userId:",
-        userId
-      );
-      return res.status(400).json({
-        error: "userId is required and must be a non-empty string",
-      });
-    }
-
-    const trimmedUserId = userId.trim();
-    const interviewId = `interview_${uuidv4()}`;
+    const trimmedUserId = req.user.id;
+    const interviewId = `interview_${randomUUID()}`;
     const now = new Date().toISOString();
 
     console.log(
@@ -84,9 +60,9 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("[/api/mock-interview/start] Error:", error);
     return res.status(500).json({
-      error: error.message || "Failed to start interview",
-      details:
-        process.env.NODE_ENV === "development" ? error.stack : undefined,
+      error: "Failed to start interview",
     });
   }
 }
+
+export default withAuth(handler, { roles: ["CANDIDATE"] });

@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Uploads and downloads use short-lived signed URLs issued by the server,
+// which bypass these rules. Browsers get no direct access.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

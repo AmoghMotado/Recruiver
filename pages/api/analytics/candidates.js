@@ -1,26 +1,36 @@
 // pages/api/analytics/candidates.js
-// SIMPLIFIED VERSION - Fetches exactly like your candidates page does
+// Analytics for the signed-in recruiter: every application to one of their jobs.
 
-import { adminDb } from "@/lib/firebaseAdmin";
+import { db as adminDb } from "../../../server/lib/firebaseAdmin";
+import { withAuth } from "../../../server/lib/session";
 
-export default async function handler(req, res) {
+// Firestore "in" queries accept at most 30 values
+async function getApplicationsForJobs(jobIds) {
+  const docs = [];
+  for (let i = 0; i < jobIds.length; i += 30) {
+    const snap = await adminDb
+      .collection("applications")
+      .where("jobId", "in", jobIds.slice(i, i + 30))
+      .get();
+    docs.push(...snap.docs);
+  }
+  return docs;
+}
+
+async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    console.log("🔍 Fetching candidates for analytics...");
+    const jobsSnap = await adminDb
+      .collection("jobs")
+      .where("recruiterId", "==", req.user.id)
+      .get();
+    const applicationDocs = await getApplicationsForJobs(jobsSnap.docs.map((d) => d.id));
 
-    // ========================================
-    // STEP 1: Fetch ALL applications from Firestore
-    // ========================================
-    const applicationsRef = adminDb.collection("applications");
-    const applicationsSnapshot = await applicationsRef.get();
-
-    console.log(`📦 Found ${applicationsSnapshot.size} applications`);
-
-    if (applicationsSnapshot.empty) {
+    if (applicationDocs.length === 0) {
       return res.status(200).json({
         candidates: [],
         total: 0,
@@ -34,7 +44,7 @@ export default async function handler(req, res) {
     const jobsMap = {};
     const jobIds = new Set();
 
-    applicationsSnapshot.forEach((doc) => {
+    applicationDocs.forEach((doc) => {
       const app = doc.data();
       if (app.jobId) {
         jobIds.add(app.jobId);
@@ -65,7 +75,7 @@ export default async function handler(req, res) {
     const usersMap = {};
     const userIds = new Set();
 
-    applicationsSnapshot.forEach((doc) => {
+    applicationDocs.forEach((doc) => {
       const app = doc.data();
       if (app.studentId) {
         userIds.add(app.studentId);
@@ -141,7 +151,7 @@ export default async function handler(req, res) {
     // ========================================
     const candidatesMap = {};
 
-    applicationsSnapshot.forEach((doc) => {
+    applicationDocs.forEach((doc) => {
       const app = doc.data();
       const studentId = app.studentId;
       const jobId = app.jobId;
@@ -303,3 +313,5 @@ function calculateProfileCompletion(user, profile) {
 
   return total > 0 ? Math.round((filled / total) * 100) : 0;
 }
+
+export default withAuth(handler, { roles: ["RECRUITER"] });

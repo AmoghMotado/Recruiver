@@ -1,4 +1,4 @@
-import RecruiterLayout from "@/components/recruiter/RecruiterLayout";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function RecruiterTerms() {
   return (
@@ -61,5 +61,5 @@ export default function RecruiterTerms() {
 }
 
 RecruiterTerms.getLayout = (page) => (
-  <RecruiterLayout active="terms">{page}</RecruiterLayout>
+  <DashboardLayout role="RECRUITER" active="terms">{page}</DashboardLayout>
 );

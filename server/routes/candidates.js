@@ -6,14 +6,11 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const { admin, db } = require("../lib/firebaseAdmin");
 
 const fs = require("fs").promises;
-const path = require("path");
+const { parseUploadPath } = require("../lib/uploads");
+const { extractText } = require("../lib/documentText");
 
 // ---- OpenAI client ----
-const OpenAI = require("openai");
-const openaiApiKey = process.env.OPENAI_API_KEY || "";
-const openaiModel = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-const openai =
-  openaiApiKey && new OpenAI({ apiKey: openaiApiKey });
+const { getOpenAI, OPENAI_MODEL: openaiModel } = require("../lib/openai");
 
 /* =========================================================
    Helpers
@@ -24,22 +21,15 @@ const openai =
  * It's not perfect but good enough for keyword matching + LLM.
  */
 async function readResumeText(resumePath) {
-  // resumePath like: "/uploads/resumes/1234.pdf"
-  const relative = (resumePath || "").replace(/^\/+/, "");
-  const fullPath = path.join(process.cwd(), relative);
-
-  const buffer = await fs.readFile(fullPath);
-
-  // Try UTF-8 first, fall back to latin1-ish
-  let text = buffer.toString("utf8");
-  if (!text || !/\w/.test(text)) {
-    text = buffer.toString("latin1");
-  }
-  return text || "";
+  const file = parseUploadPath(resumePath);
+  if (!file || file.kind !== "resumes") return "";
+  const buffer = await fs.readFile(file.absolutePath);
+  return extractText(buffer);
 }
 
 async function generateATSScore(resumeText, job) {
   // If no OpenAI key/client, use fallback
+  const openai = getOpenAI();
   if (!openai) {
     console.warn("OPENAI_API_KEY missing – using fallback ATS scoring");
     return generateFallbackScore(resumeText, job);
@@ -157,13 +147,17 @@ router.get(
   requireRole("RECRUITER"),
   async (req, res) => {
     try {
-      const snap = await db.collection("atsScores").get();
+      const snap = await db
+        .collection("atsScores")
+        .where("recruiterId", "==", req.user.id)
+        .get();
 
       const scores = {};
       snap.forEach((doc) => {
         const data = doc.data() || {};
-        scores[doc.id] = {
-          email: doc.id,
+        if (!data.email) return;
+        scores[data.email] = {
+          email: data.email,
           overallScore: data.overallScore || 0,
           skillsMatch: data.skillsMatch || 0,
           experienceMatch: data.experienceMatch || 0,
@@ -190,8 +184,8 @@ router.get(
 
 /**
  * POST /api/candidates/generate-ats-score
- * Body: { applicationId, resumePath }
- * Recruiter-only
+ * Body: { applicationId }
+ * Recruiter-only. The resume is always the one stored on the application.
  */
 router.post(
   "/generate-ats-score",
@@ -199,11 +193,11 @@ router.post(
   requireRole("RECRUITER"),
   async (req, res) => {
     try {
-      const { applicationId, resumePath } = req.body || {};
-      if (!applicationId || !resumePath) {
+      const { applicationId } = req.body || {};
+      if (!applicationId || typeof applicationId !== "string") {
         return res.status(400).json({
           success: false,
-          message: "applicationId and resumePath are required",
+          message: "applicationId is required",
         });
       }
 
@@ -237,7 +231,13 @@ router.post(
       }
 
       // 3) Resume text
-      const resumeText = await readResumeText(resumePath);
+      const resumeText = await readResumeText(application.resumePath);
+      if (!resumeText.trim()) {
+        return res.status(422).json({
+          success: false,
+          message: "This application has no readable resume attached.",
+        });
+      }
 
       // 4) ATS score (OpenAI or fallback)
       const atsScore = await generateATSScore(resumeText, job);
@@ -258,10 +258,11 @@ router.post(
       if (candidateEmail) {
         await db
           .collection("atsScores")
-          .doc(candidateEmail)
+          .doc(`${req.user.id}__${candidateEmail}`)
           .set(
             {
               email: candidateEmail,
+              recruiterId: req.user.id,
               applicationId,
               jobId: application.jobId,
               jobTitle: job.title || "",
