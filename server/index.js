@@ -1,4 +1,8 @@
 // server/index.js
+// Load .env / .env.production the same way Next.js does, before anything
+// reads process.env (the env check below runs before Next starts).
+require("@next/env").loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
+
 const express = require("express");
 const next = require("next");
 const cookieParser = require("cookie-parser");
